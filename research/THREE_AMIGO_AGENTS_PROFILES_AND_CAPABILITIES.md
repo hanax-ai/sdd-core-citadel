@@ -6,18 +6,25 @@
 
 ---
 
-## 🏛️ Executive Summary
+## 🏛️ Executive Summary & Visual Architecture
 
 **The Three Amigo Agents** form a tripartite autonomous engineering unit designed to author, audit, and verify software systems with zero risk of code contamination or spec drift. 
 
-Operating strictly outside target repositories, each Amigo agent plays a distinct, specialized role: **Amigo-Builder** authors code patches, **Amigo-Gatekeeper** performs rigorous substantive security reviews, and **Amigo-Researcher** maps specifications and requirement traceability.
+Operating strictly outside target repositories, each Amigo agent plays a distinct, specialized role represented by the **Three Monoliths of Engineering**:
+- **Amber Monolith (Left):** 🔨 **Amigo-Builder** (Codex / Claude Code — Code Author & Patch Synthesizer)
+- **Emerald Monolith (Center):** 🔬 **Amigo-Researcher** (Claude — Deep Spec Analysis & Traceability Nexus)
+- **Cobalt Monolith (Right):** 🛡️ **Amigo-Gatekeeper** (Gemini — Substantive Reviewer & Security Auditor)
+
+![The Three Amigo Agents — Monolithic Architecture](file:///C:/Users/JarvisRichardson/Desktop/SDD/Amigos-Agents/research/images/amigo_agents_image1.png)
+
+![The Three Amigo Agents — Data Convergence Nexus](file:///C:/Users/JarvisRichardson/Desktop/SDD/Amigos-Agents/research/images/amigo_agents_image2.png)
 
 ```mermaid
 flowchart TD
     subgraph ThreeAmigoAgents ["🌵 The Three Amigo Agents Roster"]
-        Builder["🔨 Amigo-Builder<br/>(Codex / Claude Code)<br/>The Architect & Patch Author"]
-        Gatekeeper["🛡️ Amigo-Gatekeeper<br/>(Gemini)<br/>Substantive Reviewer & Security Auditor"]
-        Researcher["🔬 Amigo-Researcher<br/>(Claude)<br/>Deep Spec & Traceability Analyst"]
+        Builder["🔨 Amigo-Builder (Amber Monolith)<br/>(Codex / Claude Code)<br/>The Architect & Patch Author"]
+        Gatekeeper["🛡️ Amigo-Gatekeeper (Cobalt Monolith)<br/>(Gemini)<br/>Substantive Reviewer & Security Auditor"]
+        Researcher["🔬 Amigo-Researcher (Emerald Monolith)<br/>(Claude)<br/>Deep Spec & Traceability Analyst"]
     end
 
     subgraph AutonomousLoop ["Automated Implementer-Reviewer Loop"]
@@ -30,6 +37,7 @@ flowchart TD
 
     ThreeAmigoAgents <--> AutonomousLoop
 ```
+
 
 ---
 
