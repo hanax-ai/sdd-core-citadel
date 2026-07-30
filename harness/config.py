@@ -9,6 +9,18 @@ import os
 # Root directory of Amigo Agents
 AMIGO_ROOT = Path(__file__).resolve().parents[1]
 
+def load_env_file():
+    """Load environment variables from .env file if present."""
+    env_file = AMIGO_ROOT / ".env"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip().strip("'\""))
+
+load_env_file()
+
 # Default target directory to audit / build against
 DEFAULT_TARGET_DIR = Path("/mnt/c/Users/JarvisRichardson/Desktop/WiP/SDD-Core-Framework-Analysis")
 
