@@ -59,9 +59,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     print(f"🚀 Initializing Amigo Agents for task: {args.task}")
-    print(f"📂 Target Directory: {args.target-dir}")
-    print("✨ Harness initialization complete. Ready for agent dispatch.")
+    print(f"📂 Target Directory: {args.target_dir}")
+    
+    target_path = Path(args.target_dir)
+    from harness.remediation_loop import run_collaboration_cycle
+    result = run_collaboration_cycle(target_path, args.task)
+    
+    print("\n✨ Amigo Agents Collaboration Cycle Complete!")
     return 0
+
 
 
 if __name__ == "__main__":
