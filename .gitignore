@@ -8,6 +8,8 @@ venv/
 .venv/
 env/
 
-# Logs and transient execution artifacts
-logs/
-*.log
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
