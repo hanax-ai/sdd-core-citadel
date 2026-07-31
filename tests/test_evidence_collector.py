@@ -47,20 +47,31 @@ class _FakeEncoding:
         return "".join(tokens)
 
 
+_FAKE_ENCODING = _FakeEncoding()
+
+
+def _sized_over(unit: str, budget: int) -> str:
+    """Repeat `unit` to land clear of `budget` tokens under the fake encoder."""
+    return unit * (budget // len(_FAKE_ENCODING.encode(unit)) + 10)
+
+
+def _sized_under(unit: str, budget: int) -> str:
+    """Repeat `unit` to the most whole units that still fit inside `budget`."""
+    return unit * (budget // len(_FAKE_ENCODING.encode(unit)))
+
+
 def _use_fake_encoding(monkeypatch):
     """Force a deterministic encoder so token-boundary assertions hold
     regardless of whether the real tiktoken encoder loaded in this
     environment."""
-    monkeypatch.setattr(ec, "_ENCODING", _FakeEncoding())
+    monkeypatch.setattr(ec, "_ENCODING", _FAKE_ENCODING)
 
 
 def test_git_diff_truncation_flag_true_when_diff_exceeds_limit(tmp_path, monkeypatch):
-    # 1170 chars (well under the old 2000-char limit); under the real
-    # cl100k_base encoder this is ~1041 tokens (exceeds budget), and under
-    # the deterministic fake encoder it's exactly 1170 tokens (also exceeds
-    # budget) -- either way proves truncation is token-based, and does so
-    # deterministically here via the fake.
-    dense_diff = _DENSE_UNIT * 130
+    # Dense, high-token-per-char text: few chars, many tokens. Paired with the
+    # sparse test below, this proves truncation keys off tokens, not chars.
+    dense_diff = _sized_over(_DENSE_UNIT, ec.GIT_DIFF_TOKEN_BUDGET)
+    assert len(_FAKE_ENCODING.encode(dense_diff)) > ec.GIT_DIFF_TOKEN_BUDGET
     _use_fake_encoding(monkeypatch)
     monkeypatch.setattr(ec, "get_git_status", _fake_git_status)
     monkeypatch.setattr(ec, "get_git_diff", lambda target_dir: dense_diff)
@@ -70,12 +81,11 @@ def test_git_diff_truncation_flag_true_when_diff_exceeds_limit(tmp_path, monkeyp
 
 
 def test_git_diff_not_truncated_when_chars_high_but_tokens_low(tmp_path, monkeypatch):
-    # 2250 chars (over the old 2000-char limit); under the real cl100k_base
-    # encoder this is ~501 tokens, and under the deterministic fake encoder
-    # it's exactly 950 tokens -- both under the new token budget, proving
-    # this isn't just char truncation in disguise (a real char-based cutoff
-    # would have truncated this), deterministically here via the fake.
-    sparse_diff = _PROSE_UNIT * 50
+    # Sparse prose: many more chars than the dense fixture above, yet within the
+    # token budget -- a char-based cutoff would truncate, a token-based one must not.
+    sparse_diff = _sized_under(_PROSE_UNIT, ec.GIT_DIFF_TOKEN_BUDGET)
+    assert len(_FAKE_ENCODING.encode(sparse_diff)) <= ec.GIT_DIFF_TOKEN_BUDGET
+    assert len(sparse_diff) > len(_sized_over(_DENSE_UNIT, ec.GIT_DIFF_TOKEN_BUDGET))
     _use_fake_encoding(monkeypatch)
     monkeypatch.setattr(ec, "get_git_status", _fake_git_status)
     monkeypatch.setattr(ec, "get_git_diff", lambda target_dir: sparse_diff)
@@ -124,13 +134,10 @@ def test_focus_file_evidence_includes_real_content(tmp_path):
 
 
 def test_focus_file_content_truncated_when_tokens_exceed_budget(tmp_path, monkeypatch):
-    # 2250 chars (well under the old 4000-char limit); under the real
-    # cl100k_base encoder this is ~2001 tokens, and under the deterministic
-    # fake encoder it's exactly 2250 tokens -- both exceed the new token
-    # budget, proving truncation is token-based (not the old flat 4000-char
-    # cutoff), deterministically here via the fake.
+    # Dense text: few chars, many tokens -- clears the file-content token budget.
     _use_fake_encoding(monkeypatch)
-    dense_content = _DENSE_UNIT * 250
+    dense_content = _sized_over(_DENSE_UNIT, ec.FILE_CONTENT_TOKEN_BUDGET)
+    assert len(_FAKE_ENCODING.encode(dense_content)) > ec.FILE_CONTENT_TOKEN_BUDGET
     target = tmp_path / "big.py"
     target.write_text(dense_content, encoding="utf-8")
     evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
@@ -140,19 +147,47 @@ def test_focus_file_content_truncated_when_tokens_exceed_budget(tmp_path, monkey
 
 
 def test_focus_file_content_not_truncated_when_chars_high_but_tokens_low(tmp_path, monkeypatch):
-    # 4050 chars (over the old 4000-char limit); under the real cl100k_base
-    # encoder this is ~901 tokens, and under the deterministic fake encoder
-    # it's exactly 1710 tokens -- both under the new token budget. A real
-    # char-based cutoff would have truncated this at 4000 chars;
-    # token-aware truncation must not, deterministically here via the fake.
+    # Sparse prose: many more chars than the dense fixture above, yet within the
+    # token budget -- token-aware truncation must leave it alone.
     _use_fake_encoding(monkeypatch)
-    sparse_content = _PROSE_UNIT * 90
+    sparse_content = _sized_under(_PROSE_UNIT, ec.FILE_CONTENT_TOKEN_BUDGET)
+    assert len(_FAKE_ENCODING.encode(sparse_content)) <= ec.FILE_CONTENT_TOKEN_BUDGET
+    assert len(sparse_content) > len(_sized_over(_DENSE_UNIT, ec.FILE_CONTENT_TOKEN_BUDGET))
     target = tmp_path / "prose.py"
     target.write_text(sparse_content, encoding="utf-8")
     evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
     entry = evidence["file_evidence"][0]
     assert entry["content_truncated"] is False
     assert entry["content"] == sparse_content
+
+
+def test_encoder_load_failure_falls_back_to_chars_and_is_not_retried(monkeypatch):
+    # An encoder that can't load (offline, cold cache, missing package) must
+    # degrade to the char approximation instead of aborting evidence
+    # collection, and the failure must be cached so later calls don't retry it.
+    import builtins
+
+    monkeypatch.setattr(ec, "_ENCODING", ec._ENCODING_UNSET)
+    real_import = builtins.__import__
+    attempts = []
+
+    def _failing_import(name, *args, **kwargs):
+        if name == "tiktoken":
+            attempts.append(name)
+            raise ImportError("simulated offline / cold-cache load failure")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _failing_import)
+
+    truncated, was_truncated = ec._truncate_to_tokens("x" * 100, 10)
+    assert was_truncated is True
+    assert truncated == "x" * 40  # 10 tokens * ~4 chars per token
+
+    untouched, flag = ec._truncate_to_tokens("short", 10)
+    assert flag is False
+    assert untouched == "short"
+
+    assert len(attempts) == 1
 
 
 # --- R6: secret-scanning / redaction -----------------------------------------
@@ -199,18 +234,55 @@ def test_secret_redaction_prefixed_suffixed_credential_name(tmp_path):
     assert entry["secrets_redacted"] is True
 
 
-def test_secret_redaction_private_key_header(tmp_path):
-    target = tmp_path / "key.pem"
+def test_secret_redaction_unquoted_credential_value(tmp_path):
+    # .env / YAML / shell-export style assignments carry no quotes, so the
+    # quoted-only pattern let these through verbatim.
+    target = tmp_path / "settings.env"
     target.write_text(
-        "-----BEGIN RSA PRIVATE KEY-----\n"
-        "MIIEpAIBAAKCAQEAtestFakeKeyMaterialNotReal1234567890\n"
-        "-----END RSA PRIVATE KEY-----\n",
+        "OPENAI_API_KEY=sk-proj-placeholder-abcdefghijklmnop\n"
+        "db_password: another-placeholder-value-7654321\n",
         encoding="utf-8",
     )
     evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
     entry = evidence["file_evidence"][0]
-    assert "-----BEGIN RSA PRIVATE KEY-----" not in entry["content"]
-    assert "MIIEpAIBAAKCAQEAtestFakeKeyMaterialNotReal1234567890" not in entry["content"]
+    assert "sk-proj-placeholder-abcdefghijklmnop" not in entry["content"]
+    assert "another-placeholder-value-7654321" not in entry["content"]
+    assert "OPENAI_API_KEY" in entry["content"]
+    assert "db_password" in entry["content"]
+    assert entry["content"].count("[REDACTED-SECRET]") == 2
+    assert entry["secrets_redacted"] is True
+
+
+def _pem_banner(boundary: str, kind: str) -> str:
+    # Assembled at runtime so no complete PEM banner literal sits in tracked source.
+    return f"{'-' * 5}{boundary} {kind} PRIVATE KEY{'-' * 5}"
+
+
+_FAKE_KEY_BODY = "MIIEpAIBAAKCAQEAtestFakeKeyMaterialNotReal1234567890"
+
+
+def test_secret_redaction_private_key_full_block(tmp_path):
+    begin, end = _pem_banner("BEGIN", "RSA"), _pem_banner("END", "RSA")
+    target = tmp_path / "key.pem"
+    target.write_text(f"{begin}\n{_FAKE_KEY_BODY}\n{end}\n", encoding="utf-8")
+    evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
+    entry = evidence["file_evidence"][0]
+    assert begin not in entry["content"]
+    assert _FAKE_KEY_BODY not in entry["content"]
+    assert "[REDACTED-SECRET]" in entry["content"]
+    assert entry["secrets_redacted"] is True
+
+
+def test_secret_redaction_private_key_header_without_footer(tmp_path):
+    # Truncated/partial key material still has to be caught -- this exercises the
+    # pattern's run-to-end-of-text branch rather than the footer branch.
+    begin = _pem_banner("BEGIN", "OPENSSH")
+    target = tmp_path / "partial_key.pem"
+    target.write_text(f"{begin}\n{_FAKE_KEY_BODY}\n", encoding="utf-8")
+    evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
+    entry = evidence["file_evidence"][0]
+    assert begin not in entry["content"]
+    assert _FAKE_KEY_BODY not in entry["content"]
     assert "[REDACTED-SECRET]" in entry["content"]
     assert entry["secrets_redacted"] is True
 
@@ -260,7 +332,7 @@ def test_redact_secrets_fails_closed_on_scan_error(monkeypatch):
         def subn(self, *args, **kwargs):
             raise re.error("boom")
 
-    monkeypatch.setattr(ec, "_SECRET_PATTERNS", [("aws_access_key", _RaisingPattern())])
+    monkeypatch.setattr(ec, "_SECRET_PATTERNS", [("aws_access_key", _RaisingPattern(), ec.REDACTED)])
     text, flagged = ec._redact_secrets("some content with AKIA1234567890123456")
     assert text == ec.REDACTED
     assert flagged is True

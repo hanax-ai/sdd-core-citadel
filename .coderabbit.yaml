@@ -1,8 +1,22 @@
 reviews:
+  profile: assertive
+
+  auto_review:
+    enabled: true
+    base_branches:
+      - main
+
   path_filters:
-    # Historical implementation-plan docs contain frozen, point-in-time code
-    # blocks documenting what was originally specified -- not live source.
-    # Without this, CodeRabbit reviews those code blocks as if they were
-    # real diffs and repeatedly re-flags issues already fixed in the real
-    # source files.
-    - "!docs/superpowers/plans/**"
+    # Working notes, not source. These files embed frozen, point-in-time code
+    # blocks that CodeRabbit reviews as if they were live diffs, repeatedly
+    # re-flagging issues already fixed in the real source files.
+    # Both directories are gitignored and untracked as of 2026-07-31.
+    - "!docs/**"
+    - "!reviews/**"
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+
