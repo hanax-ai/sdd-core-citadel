@@ -6,8 +6,8 @@
 **Target Dashboard Location:** `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\dashboard\`
 **Bridge Server Implementation:** `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\harness\bridge.py` (FastAPI + `sse-starlette`)
 **Context:** **EXISTING REPOSITORY & ACTIVE HARNESS.** This goal specifies a complete production dashboard and bridge extension for an already-built multi-agent Python execution engine.
-**Design Stack:** React + Vite + TypeScript + Shadcn UI + Tailwind CSS + Zustand + TanStack Query + Framer Motion
-**Status:** Approved Master Specification & Lovable AI / Builder Execution Directive
+**Design Stack:** React + Vite / TanStack Start + TypeScript + Shadcn UI + Tailwind CSS + Zustand + TanStack Query + Framer Motion + Prism.js
+**Status:** Approved Master Specification & Lovable AI Execution Directive
 **Authority:** This goal authorizes the specification, UX design, bridge server implementation, and dashboard scaffolding. Implementation shall preserve existing repository architecture and zero-contamination isolation rules.
 
 ---
@@ -25,9 +25,10 @@ SDD-Core CITADEL provides a unified visual control surface across the three core
 ```mermaid
 flowchart TD
     subgraph Frontend ["SDD-Core CITADEL Web Interface (dashboard/)"]
-        UI["React + Vite + Shadcn UI Console"]
+        UI["React / TanStack Start + Shadcn UI Console"]
+        ModeSwitch["Connection Mode Switch: Live Bridge (127.0.0.1:8000) vs Demo Mode"]
         State["Zustand (UI State) + TanStack Query (REST)"]
-        StreamHook["useAgentStream (Native SSE EventSource)"]
+        StreamHook["useAgentStream (Native SSE EventSource + Reconnect)"]
     end
 
     subgraph BridgeServer ["FastAPI Bridge Server (harness/bridge.py - 127.0.0.1:8000)"]
@@ -60,14 +61,11 @@ flowchart TD
 ## 2. Preconditions & Existing Project Context
 
 > [!IMPORTANT]
-> **LOVABLE AI / BUILDER DIRECTIVE — EXISTING PROJECT NOTICE:**
-> Lovable AI and project builders must recognize that **Amigo Agents is an existing, functional Python/CLI harness** with established code, tests, and configuration:
-> - **Dashboard Location:** All web frontend code must be created under `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\dashboard\`.
-> - **Bridge Server Location:** The backend bridge server must be implemented at `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\harness\bridge.py`.
-> - **Harness Core:** `harness/runner.py`, `harness/remediation_loop.py`, `harness/llm_clients.py`, `harness/evidence_collector.py`, `harness/config.py`
-> - **Agent Definitions:** `agents/researcher.py`, `agents/builder.py`, `agents/gatekeeper.py`
-> - **Execution Log Directory:** `logs/<timestamp>_<slug>.json`
-> - **Propose-Only Model:** Amigo Agents **never** mutates target repositories automatically; it generates in-memory diff patches for human hand-application.
+> **LOVABLE AI CONFIRMED DECISIONS:**
+> 1. **Standalone Build + Copy-Out Bridge:** Lovable builds CITADEL as the dashboard web application and ships `bridge/bridge.py` as a standalone copy-out artifact to drop into `harness/bridge.py`.
+> 2. **Prism.js Unified Diff:** Unified diff visualizer built with Prism.js for fast, lightweight rendering.
+> 3. **Local SQLite Persistence:** RAID register and execution transcripts persisted locally by `harness/bridge.py` (SQLite), with Demo-mode fallback fixtures for hosted previews.
+> 4. **Connection Mode Switch:** Toggle in UI header: `Live Bridge` (`http://127.0.0.1:8000`) vs `Demo Mode` (scripted transcript).
 
 ---
 
@@ -75,7 +73,7 @@ flowchart TD
 
 ### 3.1 Framework & Ownership
 - **Framework:** **FastAPI + `sse-starlette`** running on `127.0.0.1:8000`.
-- **Ownership:** `harness/bridge.py` is **in-scope** for this goal and must be delivered alongside the frontend.
+- **Ownership:** `harness/bridge.py` is **in-scope** for this goal and delivered as a copy-out backend artifact.
 - **Process Model:** The bridge server runs as an independent daemon. When a run is dispatched via `POST /api/run-task`, the bridge executes `harness/remediation_loop.py` asynchronously via `asyncio.create_task()`, streaming live event payloads into a thread-safe ring buffer (`collections.deque(maxlen=1000)`).
 
 ### 3.2 Strict API Contract & JSON Schemas
@@ -111,7 +109,18 @@ Connects via Server-Sent Events (SSE). Reconnection headers (`Last-Event-ID`) ar
 
 * **`event: agent_message`**
   ```json
-  {"run_id": "run_123", "agent": "Builder", "round": 1, "message_type": "PATCH_PROPOSED", "content": "--- a/auth.py\n+++ b/auth.py\n@@ -10,3 +10,4 @@...", "timestamp": "2026-07-30T21:39:12Z"}
+  {
+    "run_id": "run_123",
+    "agent": "Gatekeeper",
+    "round": 1,
+    "message_type": "AUDIT_FINDINGS",
+    "content": "Found 2 critical issues in diff proposal.",
+    "findings": [
+      {"line": 42, "severity": "CRITICAL", "text": "Unauthenticated websocket ping loop"},
+      {"line": 88, "severity": "WARNING", "text": "Uncaught race condition on connection close"}
+    ],
+    "timestamp": "2026-07-30T21:39:12Z"
+  }
   ```
 
 * **`event: token_metric`**
@@ -129,10 +138,21 @@ Connects via Server-Sent Events (SSE). Reconnection headers (`Last-Event-ID`) ar
   {"run_id": "run_123", "error_code": "ERR_OPENAI_CREDITS_EXHAUSTED", "message": "OpenAI API returned 429 Insufficient Quota", "timestamp": "2026-07-30T21:39:26Z"}
   ```
 
-#### 3. Log History Endpoint: `GET /api/logs`
+#### 3. Log History Summary Endpoint: `GET /api/logs`
 Returns historical run list from disk/database (`[{ "run_id": "...", "task": "...", "verdict": "PASS", "created_at": "..." }]`).
 
-#### 4. System & Key Status Endpoint: `GET /api/system/status`
+#### 4. Full Transcript Endpoint for Replay: `GET /api/logs/{run_id}`
+Returns complete stored event array for deterministic replay:
+```json
+{
+  "run_id": "run_123",
+  "task": "Refactor auth pipeline",
+  "verdict": "PASS",
+  "events": [...]
+}
+```
+
+#### 5. System & Key Status Endpoint: `GET /api/system/status`
 Returns boolean key presence and active model names:
 ```json
 {
@@ -168,11 +188,11 @@ Returns boolean key presence and active model names:
 - **Framer Motion Rules:** Animated entrances for new stream cards and stage transitions only. Motion is **explicitly forbidden** on code diff text streams to ensure unhindered reading.
 
 ### 5.2 In-Memory Diff & Patch Visualizer
-- Side-by-side and unified diff viewer using Monaco Editor or Prism.js syntax highlighting.
-- Overlay Gemini review findings (`findings: list[str]`) directly onto affected line ranges with colored warning badges.
+- Prism.js unified diff viewer with syntax highlighting.
+- Overlay Gemini review findings (`findings: [{line, severity, text}]`) directly onto affected line numbers with severity badges (`CRITICAL`, `WARNING`, `NOTE`).
 
 ### 5.3 Deterministic Historical Replay Engine
-- Loads past execution logs from `logs/<timestamp>_<slug>.json` or SQLite.
+- Loads full run transcript via `GET /api/logs/{run_id}`.
 - Replays past multi-agent runs deterministically from the stored JSON event transcript (no re-invocations of live models).
 - Replay controls: Play, Pause, Scrubber Slider, and Speed Select (`1x`, `2x`, `5x`).
 
@@ -181,6 +201,7 @@ Stores program Risks, Assumptions, Issues, and Dependencies in SQLite.
 - **RAID Entity Fields:** `id`, `type` (`RISK`|`ASSUMPTION`|`ISSUE`|`DEPENDENCY`), `title`, `description`, `status` (`OPEN`|`TRIAGED`|`ASSIGNED`|`CLOSED`), `owner`, `phase`, `created_at`, `updated_at`.
 
 ### 5.5 Comprehensive UX Resilience (Empty, Loading & Error States)
+- **Connection Mode Switch:** Header toggle to switch between `Live Bridge` (`http://127.0.0.1:8000`) and `Demo Mode` (scripted preview fixture).
 - **No Runs Yet:** Clean empty state illustration with a prominent *"Dispatch First Task"* button.
 - **Disconnected Stream:** Banner notification with auto-reconnecting countdown indicator (`Reconnecting in 3s...`).
 - **Missing API Key Warning:** Warning banner highlighting missing provider keys before task dispatch.
@@ -189,40 +210,20 @@ Stores program Risks, Assumptions, Issues, and Dependencies in SQLite.
 
 ## 6. Frontend Stack & State Management Strategy
 
-- **Core Framework:** React + TypeScript + Vite (`dashboard/`).
+- **Core Framework:** React / TanStack Start + TypeScript (`src/routes`).
 - **UI & Styling:** Shadcn UI + Tailwind CSS (Dark Glassmorphism aesthetic).
 - **State Management:**
-  - **Zustand (`useUIStore`):** Active view selection, theme, drawer state, replay playback speed.
-  - **TanStack Query (`useQuery` / `useMutation`):** REST API calls (`POST /api/run-task`, `GET /api/logs`, `GET /api/system/status`).
-  - **Custom SSE Hook (`useAgentStream`):** Native `EventSource` connection with `Last-Event-ID` resume and ring-buffer syncing.
+  - **Zustand (`useUIStore`):** Active view, connection mode (`Live` vs `Demo`), bridge base URL, replay speed, drawer state.
+  - **TanStack Query (`useQuery` / `useMutation`):** REST API calls (`POST /api/run-task`, `GET /api/logs`, `GET /api/logs/{run_id}`, `GET /api/system/status`).
+  - **Custom SSE Hook (`useAgentStream`):** Native `EventSource` connection with `Last-Event-ID` resume, auto-reconnect countdown, and fallback to Demo mode.
 
 ---
 
-## 7. Serving Model & Proxy Configuration
+## 7. Delivery & Build Artifact Instructions
 
-To avoid CORS friction during development:
-- **Dev Mode:** Vite runs on `http://localhost:5173` with proxy configuration in `vite.config.ts`:
-  ```typescript
-  export default defineConfig({
-    server: {
-      proxy: {
-        '/api': 'http://127.0.0.1:8000'
-      }
-    }
-  })
-  ```
-- **Production Mode:** FastAPI serves the compiled static React build from `dashboard/dist/` directly on `http://127.0.0.1:8000`.
+1. **Dashboard App Build:** Lovable builds CITADEL as the web application in its repository environment.
+2. **Bridge Artifact Copy-Out:** Ship `bridge/bridge.py` (FastAPI + `sse-starlette`, ring buffer, SQLite logs/RAID) as a copy-out artifact to be placed in `harness/bridge.py`.
+3. **Vite Proxy Config:** Provide `vite.config.ts` proxy snippet for dropping CITADEL into local `Amigos-Agents/dashboard/`.
 
 ---
-
-## 8. Minimum Acceptance Criteria for Lovable AI
-
-1. **Dashboard Location:** Built strictly inside `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\dashboard\`.
-2. **Bridge Integration:** `harness/bridge.py` starts cleanly and handles `POST /api/run-task` and `GET /api/stream/{run_id}`.
-3. **Real-Time Streaming:** Live SSE card streams render correctly for Claude, Codex, and Gemini with WCAG AA contrast.
-4. **Patch Visualizer:** Renders syntax-highlighted diffs with Gemini audit annotations.
-5. **Deterministic Replay:** Accurately replays transcripts from `logs/*.json`.
-6. **Secret Safety:** API keys are never exposed in REST/SSE payloads.
-
----
-*Master Specification approved for SDD-Core CITADEL Dashboard. Ready for Lovable AI execution.*
+*Master Specification approved for SDD-Core CITADEL Dashboard. Confirmed for Lovable AI execution.*
