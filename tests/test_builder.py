@@ -2,34 +2,39 @@ import agents.builder as builder_module
 from agents.builder import AmigoBuilder
 
 
-def test_propose_patch_calls_builder_and_returns_patch(monkeypatch):
+async def test_propose_patch_calls_builder_and_returns_patch(monkeypatch):
     captured = {}
 
-    def fake_call_builder(system, user):
+    async def fake_call_builder(system, user):
         captured["user"] = user
-        return "--- a/file.py\n+++ b/file.py\n"
+        return {"text": "--- a/file.py\n+++ b/file.py\n", "input_tokens": 1, "output_tokens": 1, "elapsed_ms": 1}
 
     monkeypatch.setattr(builder_module, "call_builder", fake_call_builder)
 
-    result = AmigoBuilder().propose_patch("fix the bug", "notes text", {"git_status": {}})
+    result = await AmigoBuilder().propose_patch("fix the bug", "notes text", {"git_status": {}})
 
     assert result.startswith("--- a/file.py")
     assert "fix the bug" in captured["user"]
     assert "notes text" in captured["user"]
-    assert "None" in captured["user"]  # no prior findings on round 1
+    assert "None" in captured["user"]
 
 
-def test_propose_patch_includes_prior_findings(monkeypatch):
+async def test_propose_patch_formats_structured_prior_findings(monkeypatch):
     captured = {}
 
-    def fake_call_builder(system, user):
+    async def fake_call_builder(system, user):
         captured["user"] = user
-        return "patch"
+        return {"text": "patch", "input_tokens": 1, "output_tokens": 1, "elapsed_ms": 1}
 
     monkeypatch.setattr(builder_module, "call_builder", fake_call_builder)
 
-    AmigoBuilder().propose_patch(
-        "fix the bug", "notes", {}, prior_findings=["missing null check"]
+    await AmigoBuilder().propose_patch(
+        "fix the bug",
+        "notes",
+        {},
+        prior_findings=[{"line": 12, "severity": "CRITICAL", "text": "missing null check"}],
     )
 
+    assert "CRITICAL" in captured["user"]
+    assert "line 12" in captured["user"]
     assert "missing null check" in captured["user"]
