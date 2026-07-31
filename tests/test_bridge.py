@@ -56,15 +56,38 @@ def test_correct_api_key_is_accepted_on_a_read_route(client):
     assert resp.status_code == 200
 
 
-def test_correct_api_key_via_query_param_is_accepted(client):
-    # EventSource (used by the SSE stream route) can't set headers, so the
-    # bridge must also accept the key as a `?key=` query param.
+def test_correct_api_key_via_query_param_is_accepted_on_the_stream_route(client):
+    # EventSource (used by the SSE stream route) can't set headers, so that
+    # route -- and only that route -- must also accept the key as a `?key=`
+    # query param. Consume a bit of the stream to prove the connection was
+    # actually accepted (an unauthorized request never even opens the
+    # stream/gets a 401 instead).
+    with client.stream("GET", "/api/stream/does-not-exist", params={"key": "test-secret-key"}) as resp:
+        assert resp.status_code == 200
+
+
+def test_wrong_api_key_via_query_param_is_rejected_on_the_stream_route(client):
+    resp = client.get("/api/stream/does-not-exist", params={"key": "nope"})
+    assert resp.status_code == 401
+
+
+def test_query_param_key_is_not_accepted_on_other_routes(client):
+    # Regression test: the query-param fallback exists ONLY for the SSE
+    # stream route. Every other route must stay header-only, even with no
+    # header at all and a valid `?key=`.
     resp = client.get("/api/logs", params={"key": "test-secret-key"})
-    assert resp.status_code == 200
+    assert resp.status_code == 401
 
 
-def test_wrong_api_key_via_query_param_is_rejected(client):
-    resp = client.get("/api/logs", params={"key": "nope"})
+def test_empty_header_does_not_fall_through_to_query_param_on_stream_route(client):
+    # Regression test: an empty-but-present X-Bridge-Key header must not be
+    # treated as "no header" -- the header takes precedence over the query
+    # param even when it's the empty string, so this must still be rejected.
+    resp = client.get(
+        "/api/stream/does-not-exist",
+        params={"key": "test-secret-key"},
+        headers={"X-Bridge-Key": ""},
+    )
     assert resp.status_code == 401
 
 
