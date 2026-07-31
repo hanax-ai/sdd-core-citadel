@@ -40,20 +40,34 @@ flowchart TD
 ```text
 Amigos-Agents/
 ├── README.md                           <-- Master Index & Harness Overview
-├── AMIGO_AGENTS_HARNESS_BLUEPRINT.md   <-- Detailed Multi-Agent Collaboration Blueprint
 ├── AGENTS.md                           <-- Amigo Agents Standing Directives & Conduct Rules
+├── requirements.txt                    <-- Python dependencies
+├── .env.example                        <-- Environment variable template
+├── .gitignore
+│
+├── docs/                               <-- Design & Planning Docs
+│   ├── AMIGO_AGENTS_HARNESS_BLUEPRINT.md   <-- Detailed Multi-Agent Collaboration Blueprint
+│   └── implementation_plan.md              <-- Phased build roadmap
+│
+├── reviews/                            <-- Review & Audit Reports
 │
 ├── harness/                            <-- Multi-Agent Collaboration Orchestrator
-│   └── runner.py                       <-- Python harness controller & execution loop
+│   ├── config.py                       <-- Env/paths loader
+│   ├── runner.py                       <-- CLI controller
+│   ├── evidence_collector.py           <-- Git/file evidence gathering
+│   └── remediation_loop.py             <-- Evidence dispatch (gate validation deferred to native SDD-Core tools)
 │
 ├── agents/                             <-- Agent Roster & Persona Definitions
-│   ├── builder.json                    <-- Amigo-Builder (Codex / Claude Code) profile
-│   ├── reviewer.json                   <-- Amigo-Gatekeeper (Gemini) profile
-│   └── researcher.json                 <-- Amigo-Researcher (Claude) profile
+│   ├── builder.json                    <-- Amigo-Builder profile
+│   └── gatekeeper.py                   <-- Amigo-Gatekeeper review-prompt helper
 │
 ├── tools/                              <-- Shared Validation & Diff Inspection Helpers
-│   ├── sha256_verifier.py              <-- Predecessor manifest hash verifier
-│   └── lint_runner.py                  <-- JSON Schema Draft 2020-12 linter wrapper
+│   ├── git_adapter.py                  <-- Git status/diff extractor
+│   └── linter_adapter.py               <-- JSON syntax & SHA-256 validator
+│
+├── research/                           <-- Background research artifacts
+│
+├── tests/                              <-- Pytest regression suite
 │
 └── logs/                               <-- Execution Transcripts & Gatekeeper Reviews
 ```
