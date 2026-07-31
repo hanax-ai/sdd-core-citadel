@@ -31,7 +31,8 @@ REDACTED = "[REDACTED-SECRET]"
 _SECRET_PATTERNS = [
     ("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("generic_credential", re.compile(
-        r"(?i)(api[_-]?key|secret|token|password)(\s*[:=]\s*)(['\"])[^'\"]{16,}\3"
+        r"(?i)([A-Za-z0-9_]*(?:api[_-]?key|secret|token|password)[A-Za-z0-9_]*)"
+        r"(\s*[:=]\s*)(['\"])[^'\"]{16,}\3"
     )),
     # Redact from a private-key header through its matching footer, or to the
     # end of the text if no footer is present, so key material never leaks
@@ -48,8 +49,9 @@ def _redact_secrets(text: str) -> tuple[str, bool]:
     """Scan text for high-confidence secret/credential patterns and redact them in place.
 
     Returns (possibly-redacted text, whether anything was redacted). Never
-    raises: a failure in scanning falls back to returning the original text
-    unredacted rather than crashing evidence collection.
+    raises: this is a security control, so a scanning failure fails closed --
+    the whole text is replaced with the redaction placeholder and the flag is
+    set True, rather than passing unscanned content through.
     """
     try:
         redacted = False
@@ -65,8 +67,12 @@ def _redact_secrets(text: str) -> tuple[str, bool]:
                 redacted = True
             text = new_text
         return text, redacted
-    except Exception:
-        return text, False
+    except (re.error, RecursionError):
+        # re.error is largely defensive (patterns are precompiled at module
+        # load, so it shouldn't fire here); RecursionError is the realistic
+        # failure mode -- catastrophic backtracking on adversarial/large
+        # input being scanned. Either way, fail closed.
+        return REDACTED, True
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> tuple[str, bool]:
