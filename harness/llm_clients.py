@@ -40,6 +40,40 @@ def _is_gemini_quota_error(exc) -> bool:
     return getattr(exc, "code", None) == 429 or getattr(exc, "status", None) == "RESOURCE_EXHAUSTED"
 
 
+async def _call_with_fallback(request, *, model: str, role: str, label: str, error_cls, is_quota):
+    """Shared quota/rate-limit fallback flow used by all three provider clients:
+    try the primary call; on a quota/rate-limit error, look up a per-role
+    fallback base_url/model/key triple from the environment and retry once;
+    raise a clear RuntimeError at every failure point. Returns
+    (response, fallback_used).
+
+    `request` is the provider's `_request(base_url, request_model, request_key)`
+    closure. `error_cls` is the SDK exception type to catch. `is_quota(exc)`
+    decides whether a caught exception is a quota/rate-limit condition worth
+    falling back on (as opposed to any other provider error, which fails
+    fast with no fallback attempt)."""
+    try:
+        return await request(None, model), False
+    except error_cls as exc:
+        if not is_quota(exc):
+            raise RuntimeError(f"{label} call failed: {exc}") from exc
+        fallback_base_url, fallback_model, fallback_key = _fallback_config(role)
+        if not fallback_base_url:
+            raise RuntimeError(
+                f"{label} call failed: quota/rate-limit exceeded ({exc}); "
+                f"no fallback configured (set {role}_FALLBACK_BASE_URL/{role}_FALLBACK_MODEL/"
+                f"{role}_FALLBACK_API_KEY)."
+            ) from exc
+        try:
+            response = await request(fallback_base_url, fallback_model, fallback_key)
+        except error_cls as fallback_exc:
+            raise RuntimeError(
+                f"{label} call failed: quota/rate-limit exceeded ({exc}); "
+                f"fallback endpoint also failed: {fallback_exc}"
+            ) from fallback_exc
+        return response, True
+
+
 FINDINGS_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -91,27 +125,14 @@ async def call_researcher(system: str, user: str) -> dict:
         finally:
             await client.close()
 
-    fallback_used = False
-    try:
-        response = await _request(None, model)
-    except anthropic.RateLimitError as exc:
-        fallback_base_url, fallback_model, fallback_key = _fallback_config("RESEARCHER")
-        if not fallback_base_url:
-            raise RuntimeError(
-                f"Amigo-Researcher (Anthropic) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set RESEARCHER_FALLBACK_BASE_URL/RESEARCHER_FALLBACK_MODEL/"
-                "RESEARCHER_FALLBACK_API_KEY)."
-            ) from exc
-        try:
-            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
-        except anthropic.AnthropicError as fallback_exc:
-            raise RuntimeError(
-                f"Amigo-Researcher (Anthropic) call failed: quota/rate-limit exceeded ({exc}); "
-                f"fallback endpoint also failed: {fallback_exc}"
-            ) from fallback_exc
-        fallback_used = True
-    except anthropic.AnthropicError as exc:
-        raise RuntimeError(f"Amigo-Researcher (Anthropic) call failed: {exc}") from exc
+    response, fallback_used = await _call_with_fallback(
+        _request,
+        model=model,
+        role="RESEARCHER",
+        label="Amigo-Researcher (Anthropic)",
+        error_cls=anthropic.AnthropicError,
+        is_quota=lambda exc: isinstance(exc, anthropic.RateLimitError),
+    )
 
     text = next((block.text for block in response.content if block.type == "text"), "")
     result = {
@@ -149,27 +170,14 @@ async def call_builder(system: str, user: str) -> dict:
         finally:
             await client.close()
 
-    fallback_used = False
-    try:
-        response = await _request(None, model)
-    except openai.RateLimitError as exc:
-        fallback_base_url, fallback_model, fallback_key = _fallback_config("BUILDER")
-        if not fallback_base_url:
-            raise RuntimeError(
-                f"Amigo-Builder (OpenAI) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set BUILDER_FALLBACK_BASE_URL/BUILDER_FALLBACK_MODEL/"
-                "BUILDER_FALLBACK_API_KEY)."
-            ) from exc
-        try:
-            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
-        except openai.OpenAIError as fallback_exc:
-            raise RuntimeError(
-                f"Amigo-Builder (OpenAI) call failed: quota/rate-limit exceeded ({exc}); "
-                f"fallback endpoint also failed: {fallback_exc}"
-            ) from fallback_exc
-        fallback_used = True
-    except openai.OpenAIError as exc:
-        raise RuntimeError(f"Amigo-Builder (OpenAI) call failed: {exc}") from exc
+    response, fallback_used = await _call_with_fallback(
+        _request,
+        model=model,
+        role="BUILDER",
+        label="Amigo-Builder (OpenAI)",
+        error_cls=openai.OpenAIError,
+        is_quota=lambda exc: isinstance(exc, openai.RateLimitError),
+    )
 
     result = {
         "text": response.output_text or "",
@@ -238,27 +246,14 @@ async def call_gatekeeper(system: str, user: str) -> dict:
         finally:
             await client.aio.aclose()
 
-    fallback_used = False
-    try:
-        response = await _request(None, model)
-    except genai_errors.APIError as exc:
-        if not _is_gemini_quota_error(exc):
-            raise RuntimeError(f"Amigo-Gatekeeper (Gemini) call failed: {exc}") from exc
-        fallback_base_url, fallback_model, fallback_key = _fallback_config("GATEKEEPER")
-        if not fallback_base_url:
-            raise RuntimeError(
-                f"Amigo-Gatekeeper (Gemini) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set GATEKEEPER_FALLBACK_BASE_URL/GATEKEEPER_FALLBACK_MODEL/"
-                "GATEKEEPER_FALLBACK_API_KEY)."
-            ) from exc
-        try:
-            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
-        except genai_errors.APIError as fallback_exc:
-            raise RuntimeError(
-                f"Amigo-Gatekeeper (Gemini) call failed: quota/rate-limit exceeded ({exc}); "
-                f"fallback endpoint also failed: {fallback_exc}"
-            ) from fallback_exc
-        fallback_used = True
+    response, fallback_used = await _call_with_fallback(
+        _request,
+        model=model,
+        role="GATEKEEPER",
+        label="Amigo-Gatekeeper (Gemini)",
+        error_cls=genai_errors.APIError,
+        is_quota=_is_gemini_quota_error,
+    )
 
     raw_text = response.text or "{}"
     try:
