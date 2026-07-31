@@ -215,3 +215,68 @@ async def test_token_metric_events_are_emitted_with_usage_fields(tmp_path, monke
     assert gatekeeper_events[0]["input_tokens"] == 30
     assert gatekeeper_events[0]["output_tokens"] == 12
     assert gatekeeper_events[0]["elapsed_ms"] == 300
+
+
+def _patch_agents_with_gatekeeper_attribution(monkeypatch, provider, model):
+    """Patch the three agents so the Gatekeeper reports which provider served
+    it, the way a real review() does after call_gatekeeper returns."""
+
+    async def fake_analyze(self, task, evidence):
+        return "notes"
+
+    async def fake_propose(self, task, notes, evidence, prior_findings=None):
+        return "patch"
+
+    async def fake_review(self, patch_text, evidence):
+        self.last_provider = provider
+        self.last_model = model
+        return []
+
+    monkeypatch.setattr(remediation_loop.AmigoResearcher, "analyze", fake_analyze)
+    monkeypatch.setattr(remediation_loop.AmigoBuilder, "propose_patch", fake_propose)
+    monkeypatch.setattr(remediation_loop.AmigoGatekeeper, "review", fake_review)
+
+
+async def test_gatekeeper_agent_message_carries_provider_and_model(tmp_path, monkeypatch):
+    # An AUDIT_FINDINGS event that only says agent="Gatekeeper" leaves the
+    # dashboard badging whichever provider is configured at view time, which is
+    # wrong for any run served by the other one.
+    _patch_agents_with_gatekeeper_attribution(monkeypatch, "kimi", "kimi-k3")
+    events = []
+
+    await run_collaboration_cycle(tmp_path, "fix the bug", log_dir=tmp_path / "logs", on_event=events.append)
+
+    findings_events = [e for e in events if e["type"] == "agent_message" and e["agent"] == "Gatekeeper"]
+    assert len(findings_events) == 1
+    assert findings_events[0]["provider"] == "kimi"
+    assert findings_events[0]["model"] == "kimi-k3"
+    # The other two roles are not switchable, so they stay unstamped.
+    builder_events = [e for e in events if e["type"] == "agent_message" and e["agent"] == "Builder"]
+    assert "provider" not in builder_events[0]
+
+
+async def test_transcript_rounds_record_the_gatekeeper_provider_and_model(tmp_path, monkeypatch):
+    # The transcript is what a replay reads back, so the attribution has to be
+    # persisted per round rather than inferred from the environment at replay.
+    _patch_agents_with_gatekeeper_attribution(monkeypatch, "gemini", "gemini-3.6-flash")
+
+    result = await run_collaboration_cycle(tmp_path, "fix the bug", log_dir=tmp_path / "logs")
+
+    assert result["rounds"][0]["gatekeeper_provider"] == "gemini"
+    assert result["rounds"][0]["gatekeeper_model"] == "gemini-3.6-flash"
+
+    log_files = list((tmp_path / "logs").glob("*.json"))
+    logged = json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert logged["rounds"][0]["gatekeeper_provider"] == "gemini"
+    assert logged["rounds"][0]["gatekeeper_model"] == "gemini-3.6-flash"
+
+
+async def test_unattributed_gatekeeper_round_records_null_not_a_guess(tmp_path, monkeypatch):
+    # A review that never reported a provider must persist as unknown. Filling in
+    # the configured provider would recreate the mislabelling this fixes.
+    _patch_agents(monkeypatch, [[]])
+
+    result = await run_collaboration_cycle(tmp_path, "fix the bug", log_dir=tmp_path / "logs")
+
+    assert result["rounds"][0]["gatekeeper_provider"] is None
+    assert result["rounds"][0]["gatekeeper_model"] is None

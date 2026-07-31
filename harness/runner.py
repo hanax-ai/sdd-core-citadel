@@ -55,8 +55,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Amigo Root:    {summary['amigo_root']}")
         print(f"Default Target:{summary['default_target']}")
         print(f"Anthropic Key: {'SET' if summary['anthropic_key_set'] else 'NOT SET'}")
-        print(f"Gemini Key:    {'SET' if summary['gemini_key_set'] else 'NOT SET'}")
         print(f"OpenAI Key:    {'SET' if summary['openai_key_set'] else 'NOT SET'}")
+        # Only the ACTIVE Gatekeeper provider's key is reported. Printing
+        # "Gemini Key: NOT SET" on a working Kimi config is a false alarm, and
+        # never mentioning MOONSHOT_API_KEY at all is a false all-clear that
+        # lets a run die mid-Gatekeeper. Mirrors /api/system/status.
+        provider = summary["gatekeeper_provider"]
+        if provider is None:
+            print("Gatekeeper:    UNRECOGNISED GATEKEEPER_PROVIDER")
+            print("               valid values are 'gemini' (default) and 'kimi'; no run can start")
+        elif provider == "kimi":
+            print("Gatekeeper:    kimi (MOONSHOT_API_KEY)")
+            print(f"Moonshot Key:  {'SET' if summary['moonshot_key_set'] else 'NOT SET'}")
+        else:
+            print("Gatekeeper:    gemini (GEMINI_API_KEY)")
+            print(f"Gemini Key:    {'SET' if summary['gemini_key_set'] else 'NOT SET'}")
         return 0
 
     if not args.task:

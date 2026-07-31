@@ -13,7 +13,13 @@ import time
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.3-codex"
 DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+DEFAULT_MOONSHOT_MODEL = "kimi-k3"
 DEFAULT_TIMEOUT_SECONDS = 120
+
+# Moonshot serves Kimi through an OpenAI-compatible endpoint, so the Gatekeeper's
+# Kimi path reuses the openai SDK against this base URL instead of pulling in a
+# fourth provider package.
+MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1"
 
 
 def _fallback_config(role: str) -> tuple[str | None, str | None, str | None]:
@@ -211,7 +217,40 @@ def _validate_findings(findings, raw_text: str) -> list[dict]:
     return findings
 
 
-async def call_gatekeeper(system: str, user: str) -> dict:
+def _empty_review_findings() -> list[dict]:
+    """Blocking finding for a completion that came back with no content.
+    Degrading empty content to "{}" parses as zero findings, and zero findings
+    means "the patch is clean" -- so a review that produced no output at all
+    would approve an unreviewed patch. A merge gate must not fail open, which is
+    why the empty-choices branch raises and the abnormal-finish branches block;
+    this keeps the empty-content case in the same family. Shared by every
+    Gatekeeper provider so the gate cannot fail open on one and closed on
+    another."""
+    return [
+        {
+            "line": 0,
+            "severity": "WARNING",
+            "text": (
+                "Gatekeeper returned empty content, so the review produced no output "
+                "and the patch has not been reviewed."
+            ),
+        }
+    ]
+
+
+def _parse_gatekeeper_findings(raw_text: str) -> list[dict]:
+    """Turn a Gatekeeper model's raw JSON text into a validated findings list.
+    Shared by every Gatekeeper provider so that swapping providers cannot change
+    how malformed or unparseable review output is degraded."""
+    try:
+        parsed = json.loads(raw_text)
+        findings = parsed.get("findings", [])
+    except (json.JSONDecodeError, AttributeError):
+        findings = [{"line": 0, "severity": "WARNING", "text": f"Gatekeeper returned unparseable output: {raw_text[:200]}"}]
+    return _validate_findings(findings, raw_text)
+
+
+async def _call_gatekeeper_gemini(system: str, user: str) -> dict:
     """Call the Gemini API for Amigo-Gatekeeper. Returns structured findings."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -223,9 +262,15 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     import httpx
 
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+    resolved_model = model
     started = time.monotonic()
 
     async def _request(base_url: str | None, request_model: str, request_key: str | None = None):
+        # Record the model the request actually went out with: on the fallback
+        # path that is the fallback model, and the result has to attribute the
+        # findings to the model that really produced them.
+        nonlocal resolved_model
+        resolved_model = request_model
         client = genai.Client(
             api_key=request_key or api_key,
             http_options=genai_types.HttpOptions(timeout=DEFAULT_TIMEOUT_SECONDS * 1000, base_url=base_url),
@@ -254,20 +299,175 @@ async def call_gatekeeper(system: str, user: str) -> dict:
         is_quota=_is_gemini_quota_error,
     )
 
-    raw_text = response.text or "{}"
-    try:
-        parsed = json.loads(raw_text)
-        findings = parsed.get("findings", [])
-    except (json.JSONDecodeError, AttributeError):
-        findings = [{"line": 0, "severity": "WARNING", "text": f"Gatekeeper returned unparseable output: {raw_text[:200]}"}]
-    findings = _validate_findings(findings, raw_text)
+    raw_text = response.text or ""
+    if not raw_text.strip():
+        findings = _empty_review_findings()
+    else:
+        findings = _parse_gatekeeper_findings(raw_text)
 
     usage = getattr(response, "usage_metadata", None)
     return {
         "text": raw_text,
         "findings": findings,
+        # Which provider and model actually served this review, so a transcript
+        # replayed under a different GATEKEEPER_PROVIDER still attributes its
+        # findings correctly.
+        "provider": "gemini",
+        "model": resolved_model,
         "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
         "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
         **fallback_fields,
     }
+
+
+async def _call_gatekeeper_kimi(system: str, user: str) -> dict:
+    """Call Moonshot's Kimi K3 for Amigo-Gatekeeper. Returns structured findings.
+    Moonshot exposes an OpenAI-compatible surface but has no Responses API, so
+    unlike call_builder this goes through chat.completions."""
+    api_key = os.getenv("MOONSHOT_API_KEY")
+    if not api_key:
+        raise RuntimeError("MOONSHOT_API_KEY is not set; required for Amigo-Gatekeeper (Kimi).")
+
+    import openai
+    from openai import AsyncOpenAI
+
+    model = os.getenv("MOONSHOT_MODEL", DEFAULT_MOONSHOT_MODEL)
+    resolved_model = model
+    started = time.monotonic()
+
+    async def _request(base_url: str | None, request_model: str, request_key: str | None = None):
+        # Record the model the request actually went out with: on the fallback
+        # path that is the fallback model, and the result has to attribute the
+        # findings to the model that really produced them.
+        nonlocal resolved_model
+        resolved_model = request_model
+        # _call_with_fallback invokes the primary attempt as request(None, model),
+        # so an unset base_url has to resolve to Moonshot here -- passing None
+        # straight to AsyncOpenAI would send the primary call to OpenAI instead.
+        client = AsyncOpenAI(
+            api_key=request_key or api_key,
+            timeout=DEFAULT_TIMEOUT_SECONDS,
+            base_url=base_url or MOONSHOT_BASE_URL,
+        )
+        try:
+            # K3 rejects temperature/top_p/n/presence_penalty/frequency_penalty
+            # outright -- sending them at all is an error, so they are omitted
+            # rather than passed at their usual defaults.
+            return await client.chat.completions.create(
+                model=request_model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                # K3 always reasons and bills reasoning as output tokens; the
+                # effort default is "max", so "low" is set explicitly as a cost
+                # control on a review call that only has to emit findings JSON.
+                reasoning_effort="low",
+                # Moonshot's rate-limit accounting reserves max_completion_tokens
+                # rather than counting real output, and it defaults to 131072 --
+                # pinning it to the Researcher's 4096 keeps the reservation sane.
+                max_completion_tokens=4096,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "findings", "strict": True, "schema": FINDINGS_JSON_SCHEMA},
+                },
+            )
+        finally:
+            await client.close()
+
+    response, fallback_fields = await _call_with_fallback(
+        _request,
+        model=model,
+        role="GATEKEEPER",
+        label="Amigo-Gatekeeper (Kimi)",
+        error_cls=openai.OpenAIError,
+        # Quota exhaustion, rate limiting and overload all surface as HTTP 429
+        # on this API, which the openai SDK raises as RateLimitError.
+        is_quota=lambda exc: isinstance(exc, openai.RateLimitError),
+    )
+
+    if not response.choices:
+        # Degrading an empty choices list to "{}" the way a null message.content
+        # degrades would report zero findings for a review that never ran, and a
+        # merge gate must not fail open -- so this takes the module's other
+        # option and raises a clear RuntimeError instead. Realistic on the
+        # fallback path, which points at an arbitrary third-party server.
+        raise RuntimeError("Amigo-Gatekeeper (Kimi) call failed: response contained no choices.")
+
+    choice = response.choices[0]
+    # The message also carries reasoning_content; only content holds the
+    # schema-conforming findings JSON, so the reasoning trace is never read.
+    raw_text = choice.message.content or ""
+    finish_reason = getattr(choice, "finish_reason", None)
+    if finish_reason == "length":
+        # max_completion_tokens is shared by reasoning and content on K3, so a
+        # cutoff usually yields invalid JSON that would otherwise degrade to a
+        # blocking "unparseable output" finding naming the wrong cause. Still
+        # blocking -- the review did not finish -- but now diagnosable.
+        findings = [
+            {
+                "line": 0,
+                "severity": "WARNING",
+                "text": (
+                    "Gatekeeper response was truncated by the max_completion_tokens limit "
+                    f"(finish_reason=length), so the review is incomplete: {raw_text[:200]}"
+                ),
+            }
+        ]
+    elif finish_reason not in (None, "stop"):
+        # Any other abnormal terminator means the review did not run to
+        # completion. content_filter is the realistic one here: Moonshot can
+        # filter on model *output*, not just input, so a Gatekeeper reviewing
+        # security-sensitive code can be cut off mid-review. Left deliberately
+        # broad so an unrecognised terminator blocks rather than being parsed
+        # as if it were a finished review.
+        findings = [
+            {
+                "line": 0,
+                "severity": "WARNING",
+                "text": (
+                    f"Gatekeeper response ended abnormally (finish_reason={finish_reason}), "
+                    f"so the review is incomplete: {raw_text[:200]}"
+                ),
+            }
+        ]
+    elif not raw_text.strip():
+        # A normal-looking completion whose content is null or blank: the review
+        # ran to "stop" but said nothing, which must block rather than parse as
+        # an empty (== clean) findings list.
+        findings = _empty_review_findings()
+    else:
+        findings = _parse_gatekeeper_findings(raw_text)
+
+    return {
+        "text": raw_text,
+        "findings": findings,
+        # Which provider and model actually served this review, so a transcript
+        # replayed under a different GATEKEEPER_PROVIDER still attributes its
+        # findings correctly.
+        "provider": "kimi",
+        "model": resolved_model,
+        # Moonshot reports usage with the chat-completions field names.
+        "input_tokens": response.usage.prompt_tokens if response.usage else 0,
+        "output_tokens": response.usage.completion_tokens if response.usage else 0,
+        "elapsed_ms": int((time.monotonic() - started) * 1000),
+        **fallback_fields,
+    }
+
+
+async def call_gatekeeper(system: str, user: str) -> dict:
+    """Route Amigo-Gatekeeper to its configured provider. Gemini is the default
+    and stays the default: Kimi is opt-in and only runs when GATEKEEPER_PROVIDER
+    is explicitly set to "kimi", so an environment that never sets the variable
+    keeps the exact behavior it had before Kimi existed. An empty or
+    whitespace-only value counts as unset (a bare `GATEKEEPER_PROVIDER=` line or
+    a docker-compose passthrough of an undefined variable) and keeps Gemini."""
+    provider = os.getenv("GATEKEEPER_PROVIDER", "").strip().lower() or "gemini"
+    if provider == "gemini":
+        return await _call_gatekeeper_gemini(system, user)
+    if provider == "kimi":
+        return await _call_gatekeeper_kimi(system, user)
+    raise RuntimeError(
+        f"GATEKEEPER_PROVIDER is set to {provider!r}; valid values are 'gemini' (default) and 'kimi'."
+    )
