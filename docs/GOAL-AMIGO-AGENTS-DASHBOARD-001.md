@@ -159,9 +159,9 @@ Returns boolean key presence and active model names:
   "anthropic_key_present": true,
   "openai_key_present": true,
   "gemini_key_present": true,
-  "anthropic_model": "claude-3-5-sonnet-20241022",
-  "openai_model": "gpt-4o",
-  "gemini_model": "gemini-2.0-flash"
+  "anthropic_model": "claude-opus-5",
+  "openai_model": "gpt-5.3-codex",
+  "gemini_model": "gemini-3.6-flash"
 }
 ```
 
