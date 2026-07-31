@@ -58,6 +58,7 @@ from sse_starlette.sse import EventSourceResponse
 import uvicorn
 
 from harness.config import DEFAULT_TARGET_DIR
+from harness.llm_clients import DEFAULT_ANTHROPIC_MODEL, DEFAULT_GEMINI_MODEL, DEFAULT_OPENAI_MODEL
 from harness.remediation_loop import run_collaboration_cycle
 
 APP_VERSION = "1.1.0"
@@ -72,9 +73,9 @@ PORT = int(os.environ.get("CITADEL_PORT", "8000"))
 BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY", "")
 
 MODELS = {
-    "anthropic": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-    "openai": os.environ.get("OPENAI_MODEL", "gpt-5.1-codex"),
-    "gemini": os.environ.get("GEMINI_MODEL", "gemini-3-pro"),
+    "anthropic": os.environ.get("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
+    "openai": os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+    "gemini": os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
 }
 
 # The dashboard's dev server (dashboard/vite.config.ts has no explicit port
