@@ -12,6 +12,10 @@ from pathlib import Path
 # Add parent directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Force UTF-8 stdout so emoji output doesn't crash on default Windows consoles (cp1252).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from harness.config import AMIGO_ROOT, DEFAULT_TARGET_DIR, ensure_directories, get_env_summary
 
 
