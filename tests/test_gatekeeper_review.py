@@ -26,6 +26,23 @@ async def test_review_returns_empty_list_when_no_findings(monkeypatch):
     assert findings == []
 
 
+async def test_review_sets_last_usage_after_call(monkeypatch):
+    async def fake_call_gatekeeper(system, user):
+        return {
+            "text": "{}",
+            "findings": [],
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "elapsed_ms": 100,
+        }
+
+    monkeypatch.setattr(gatekeeper_module, "call_gatekeeper", fake_call_gatekeeper)
+    gatekeeper = AmigoGatekeeper(api_key="unused")
+    await gatekeeper.review("diff text", {"git_status": {}})
+
+    assert gatekeeper.last_usage == {"input_tokens": 10, "output_tokens": 5, "elapsed_ms": 100}
+
+
 def test_has_blocking_findings_true_for_critical():
     assert has_blocking_findings([{"line": 1, "severity": "CRITICAL", "text": "x"}]) is True
 

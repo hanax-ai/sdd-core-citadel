@@ -28,6 +28,7 @@ class AmigoGatekeeper:
 
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.last_usage: dict = {}
 
     def format_review_prompt(self, patch_summary: str, diff_text: str) -> str:
         """Format review prompt for external model inspection."""
@@ -47,6 +48,11 @@ class AmigoGatekeeper:
         user = self.format_review_prompt("Proposed patch under review", patch_text)
         user += f"\n\nEvidence:\n{evidence}"
         result = await call_gatekeeper(SYSTEM_PROMPT, user)
+        self.last_usage = {
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"],
+            "elapsed_ms": result["elapsed_ms"],
+        }
         return result["findings"]
 
 

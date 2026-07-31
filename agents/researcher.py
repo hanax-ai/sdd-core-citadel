@@ -17,8 +17,16 @@ SYSTEM_PROMPT = (
 class AmigoResearcher:
     """Spec and dependency analyst."""
 
+    def __init__(self):
+        self.last_usage: dict = {}
+
     async def analyze(self, task: str, evidence: dict) -> str:
         """Produce research notes for the given task and evidence."""
         user = f"Task: {task}\n\nEvidence:\n{evidence}"
         result = await call_researcher(SYSTEM_PROMPT, user)
+        self.last_usage = {
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"],
+            "elapsed_ms": result["elapsed_ms"],
+        }
         return result["text"]
