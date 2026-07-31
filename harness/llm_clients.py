@@ -23,12 +23,15 @@ def call_researcher(system: str, user: str) -> str:
 
     client = anthropic.Anthropic(api_key=api_key)
     model = os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
-    response = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+    except anthropic.AnthropicError as exc:
+        raise RuntimeError(f"Amigo-Researcher (Anthropic) call failed: {exc}") from exc
     return next((block.text for block in response.content if block.type == "text"), "")
 
 
@@ -38,18 +41,20 @@ def call_builder(system: str, user: str) -> str:
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set; required for Amigo-Builder.")
 
+    import openai
     from openai import OpenAI
 
     client = OpenAI(api_key=api_key)
     model = os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    )
-    return response.choices[0].message.content or ""
+    try:
+        response = client.responses.create(
+            model=model,
+            instructions=system,
+            input=user,
+        )
+    except openai.OpenAIError as exc:
+        raise RuntimeError(f"Amigo-Builder (OpenAI) call failed: {exc}") from exc
+    return response.output_text or ""
 
 
 def call_gatekeeper(system: str, user: str) -> str:
@@ -59,8 +64,12 @@ def call_gatekeeper(system: str, user: str) -> str:
         raise RuntimeError("GEMINI_API_KEY is not set; required for Amigo-Gatekeeper.")
 
     from google import genai
+    from google.genai import errors as genai_errors
 
     client = genai.Client(api_key=api_key)
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-    response = client.models.generate_content(model=model, contents=f"{system}\n\n{user}")
+    try:
+        response = client.models.generate_content(model=model, contents=f"{system}\n\n{user}")
+    except genai_errors.APIError as exc:
+        raise RuntimeError(f"Amigo-Gatekeeper (Gemini) call failed: {exc}") from exc
     return response.text or ""
