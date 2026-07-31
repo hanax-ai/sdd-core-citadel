@@ -49,7 +49,7 @@ export const STAGE_LABEL: Record<Stage, string> = {
 
 export const findingSchema = z.object({
   line: z.number(),
-  severity: z.enum(["blocker", "warning", "note", "resolved"]),
+  severity: z.enum(["CRITICAL", "WARNING", "NOTE"]),
   text: z.string(),
 });
 export type Finding = z.infer<typeof findingSchema>;
@@ -61,20 +61,33 @@ const base = z.object({
 
 export const stageChangeSchema = base.extend({
   stage: z.enum(STAGES),
-  agent: z.enum(AGENT_ROLES),
+  agent: z.enum(AGENT_ROLES).optional(),
+  round: z.number().optional(),
+  verdict: z.enum(["PASS", "UNRESOLVED"]).optional(),
 });
 
-export const agentMessageSchema = base.extend({
-  agent: z.enum(AGENT_ROLES),
-  round: z.number().default(0),
-  message_type: z.string(),
-  content: z.string(),
-  findings: z.array(findingSchema).optional(),
-});
+export const agentMessageSchema = base
+  .extend({
+    agent: z.enum(AGENT_ROLES),
+    round: z.number().default(0),
+    message_type: z.string(),
+    content: z.string().optional(),
+    findings: z.array(findingSchema).optional(),
+  })
+  .refine(
+    (v) =>
+      v.message_type === "AUDIT_FINDINGS" ? v.findings !== undefined : v.content !== undefined,
+    {
+      message:
+        "agent_message payload is missing content (or findings, for AUDIT_FINDINGS) for its message_type",
+    },
+  );
 
 export const tokenMetricSchema = base.extend({
   agent: z.enum(AGENT_ROLES),
-  tokens_used: z.number(),
+  round: z.number().optional(),
+  input_tokens: z.number(),
+  output_tokens: z.number(),
   elapsed_ms: z.number(),
 });
 

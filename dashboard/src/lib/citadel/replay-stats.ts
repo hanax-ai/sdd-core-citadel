@@ -10,7 +10,8 @@ type Payload = {
   verdict?: string;
   timestamp?: string;
   round?: number;
-  tokens_used?: number;
+  input_tokens?: number;
+  output_tokens?: number;
   elapsed_ms?: number;
   error_code?: string;
   message?: string;
@@ -26,7 +27,8 @@ const CSV_COLUMNS = [
   "round",
   "stage",
   "message_type",
-  "tokens_used",
+  "input_tokens",
+  "output_tokens",
   "elapsed_ms",
   "verdict",
   "error_code",
@@ -59,7 +61,8 @@ export function eventsToCsv(events: ReplayEvent[], meta: CsvMeta = {}): string {
       p.round,
       p.stage,
       p.message_type,
-      p.tokens_used,
+      p.input_tokens,
+      p.output_tokens,
       p.elapsed_ms,
       p.verdict,
       p.error_code,
@@ -138,7 +141,10 @@ export function summarizeEvents(events: ReplayEvent[]): ReplaySummary {
     firstOffsetMs: offsets.length ? offsets[0] : null,
     lastOffsetMs: offsets.length ? offsets[offsets.length - 1] : null,
     spanMs: offsets.length ? offsets[offsets.length - 1] - offsets[0] : 0,
-    tokensTotal: payloads.reduce((sum, p) => sum + (p.tokens_used ?? 0), 0),
+    tokensTotal: payloads.reduce(
+      (sum, p) => sum + (p.input_tokens ?? 0) + (p.output_tokens ?? 0),
+      0,
+    ),
     topErrors: tally(errorText)
       .map(({ key, count }) => ({ text: key, count }))
       .slice(0, 5),

@@ -14,10 +14,9 @@ function classify(text: string): Line["kind"] {
 }
 
 const severityTone: Record<Finding["severity"], string> = {
-  blocker: "border-destructive/50 bg-destructive/15 text-destructive",
-  warning: "border-warning/50 bg-warning/15 text-warning",
-  note: "border-border bg-muted/50 text-muted-foreground",
-  resolved: "border-codex/50 bg-codex/15 text-codex",
+  CRITICAL: "border-destructive/50 bg-destructive/15 text-destructive",
+  WARNING: "border-warning/50 bg-warning/15 text-warning",
+  NOTE: "border-border bg-muted/50 text-muted-foreground",
 };
 
 /**
