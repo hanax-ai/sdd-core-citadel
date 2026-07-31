@@ -61,3 +61,32 @@ def test_researcher_called_exactly_once(tmp_path, monkeypatch):
     calls = _patch_agents(monkeypatch, [[]])
     run_collaboration_cycle(tmp_path, "fix the bug", log_dir=tmp_path / "logs")
     assert calls["analyze"] == 1
+
+
+def test_file_named_in_task_is_read_into_evidence(tmp_path, monkeypatch):
+    target = tmp_path / "harness"
+    target.mkdir()
+    (target / "config.py").write_text("DEFAULT_TARGET_DIR = 'real value'\n", encoding="utf-8")
+
+    captured_evidence = {}
+
+    def fake_analyze(self, task, evidence):
+        captured_evidence.update(evidence)
+        return "notes"
+
+    monkeypatch.setattr(remediation_loop.AmigoResearcher, "analyze", fake_analyze)
+    monkeypatch.setattr(
+        remediation_loop.AmigoBuilder, "propose_patch", lambda self, *a, **k: "patch"
+    )
+    monkeypatch.setattr(remediation_loop.AmigoGatekeeper, "review", lambda self, *a, **k: [])
+
+    run_collaboration_cycle(
+        tmp_path,
+        "Add a comment above the assignment in harness/config.py",
+        log_dir=tmp_path / "logs",
+    )
+
+    paths = [entry["path"] for entry in captured_evidence["file_evidence"]]
+    assert any("config.py" in p for p in paths)
+    contents = [entry["content"] for entry in captured_evidence["file_evidence"]]
+    assert any("real value" in c for c in contents)

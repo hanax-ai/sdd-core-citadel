@@ -34,6 +34,10 @@ class AmigoGatekeeper:
         notice = "\n[...diff truncated...]\n" if len(diff_text) > 3000 else ""
         return (
             f"Review Request for Task: {patch_summary}\n\n"
+            f"Diff format note: lines starting with '+' are being ADDED by "
+            f"this patch. Lines with no leading '+' or '-' are unchanged "
+            f"pre-existing context shown only for orientation -- they are "
+            f"NOT part of this patch and were not introduced by it.\n\n"
             f"Diff Summary:\n{truncated_diff}{notice}"
         )
 

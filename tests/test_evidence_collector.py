@@ -43,3 +43,21 @@ def test_syntax_check_not_performed_marker_for_unknown_suffix(tmp_path):
     evidence = ec.collect_task_evidence(tmp_path, focus_files=[other])
     assert evidence["file_evidence"][0]["syntax_valid"] is True
     assert evidence["file_evidence"][0]["syntax_error"] == "NOT_CHECKED"
+
+
+def test_focus_file_evidence_includes_real_content(tmp_path):
+    target = tmp_path / "small.py"
+    target.write_text("DEFAULT_TARGET_DIR = 'placeholder'\n", encoding="utf-8")
+    evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
+    entry = evidence["file_evidence"][0]
+    assert entry["content"] == "DEFAULT_TARGET_DIR = 'placeholder'\n"
+    assert entry["content_truncated"] is False
+
+
+def test_focus_file_content_truncated_for_large_files(tmp_path):
+    target = tmp_path / "big.py"
+    target.write_text("x" * 5000, encoding="utf-8")
+    evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
+    entry = evidence["file_evidence"][0]
+    assert len(entry["content"]) == 4000
+    assert entry["content_truncated"] is True

@@ -30,12 +30,15 @@ def collect_task_evidence(target_dir: Path, focus_files: list[Path] | None = Non
                         syntax_valid, syntax_err = False, str(exc)
                 else:
                     syntax_valid, syntax_err = True, "NOT_CHECKED"
+                raw_content = f.read_text(encoding="utf-8", errors="replace")
                 file_evidence.append({
                     "path": str(f.relative_to(target_dir) if f.is_relative_to(target_dir) else f),
                     "size_bytes": f.stat().st_size,
                     "sha256": compute_file_sha256(f),
                     "syntax_valid": syntax_valid,
                     "syntax_error": syntax_err,
+                    "content": raw_content[:4000],
+                    "content_truncated": len(raw_content) > 4000,
                 })
 
     diff_truncated = bool(git_diff) and len(git_diff) > 2000
