@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -34,7 +35,7 @@ def _make_fake_gemini_client(raw_text, usage_metadata=None):
         return response
 
     class FakeClient:
-        instances = []
+        instances: ClassVar[list] = []
 
         def __init__(self, *args, **kwargs):
             self.aclose_called = False
@@ -124,7 +125,7 @@ def _make_fake_anthropic_client(*, fail_with=None, succeed_text="ok"):
     invocations = {"n": 0}
 
     class FakeAsyncAnthropic:
-        instances = []
+        instances: ClassVar[list] = []
 
         def __init__(self, *args, **kwargs):
             construct_calls.append(kwargs)
@@ -252,7 +253,7 @@ def _make_fake_openai_client(*, fail_with=None, succeed_text="ok"):
     invocations = {"n": 0}
 
     class FakeAsyncOpenAI:
-        instances = []
+        instances: ClassVar[list] = []
 
         def __init__(self, *args, **kwargs):
             construct_calls.append(kwargs)
@@ -390,7 +391,7 @@ def _make_fake_gemini_fallback_client(*, fail_with=None, raw_text='{"findings": 
         return response
 
     class FakeClient:
-        instances = []
+        instances: ClassVar[list] = []
 
         def __init__(self, *args, **kwargs):
             construct_calls.append(kwargs)
