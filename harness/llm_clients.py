@@ -10,7 +10,7 @@ import os
 
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.3-codex"
-DEFAULT_GEMINI_MODEL = "gemini-3.1-pro"
+DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
 
 
 def call_researcher(system: str, user: str) -> str:
