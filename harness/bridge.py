@@ -23,10 +23,12 @@ Contract implemented:
 ZERO CONTAMINATION: this process never writes to AMIGO_TARGET_DIR. Patches are
 returned as unified diff text only and must be applied by hand.
 
-AUTH: every route requires a shared secret sent as the `X-Bridge-Key` header,
-checked against the BRIDGE_API_KEY env var (see harness/BRIDGE_README.md).
-This is a bridge-level addition on top of the harness's own event contract;
-the harness itself has no concept of auth.
+AUTH: every route requires a shared secret, checked against the BRIDGE_API_KEY
+env var (see harness/BRIDGE_README.md). Sent as the `X-Bridge-Key` header
+normally; the SSE stream route also accepts it as a `?key=` query param,
+since the browser's native EventSource API cannot set custom headers. This
+is a bridge-level addition on top of the harness's own event contract; the
+harness itself has no concept of auth.
 
 `error` SSE events are also a bridge-level addition: `run_collaboration_cycle`
 has no `error` event type of its own -- a provider failure raises a plain
@@ -49,7 +51,7 @@ from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -83,10 +85,19 @@ DASHBOARD_DEV_ORIGINS = [
 ]
 
 
-async def require_bridge_key(x_bridge_key: str | None = Header(default=None, alias="X-Bridge-Key")) -> None:
+async def require_bridge_key(
+    x_bridge_key: str | None = Header(default=None, alias="X-Bridge-Key"),
+    key: str | None = Query(default=None),
+) -> None:
     """Localhost-dev-tool auth: a single static shared secret, constant-time
-    compared. Not a login system -- see harness/BRIDGE_README.md."""
-    if not x_bridge_key or not hmac.compare_digest(x_bridge_key, BRIDGE_API_KEY):
+    compared. Not a login system -- see harness/BRIDGE_README.md.
+
+    Checks the `X-Bridge-Key` header first; if absent, falls back to a `?key=`
+    query param. The fallback exists for the SSE stream route -- the browser's
+    native EventSource API cannot set custom request headers, so that's the
+    only way it can authenticate."""
+    supplied = x_bridge_key or key
+    if not supplied or not hmac.compare_digest(supplied, BRIDGE_API_KEY):
         raise HTTPException(
             status_code=401,
             detail={"error_code": "UNAUTHORIZED", "message": "Missing or invalid X-Bridge-Key header."},

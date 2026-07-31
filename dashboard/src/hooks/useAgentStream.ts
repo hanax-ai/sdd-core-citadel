@@ -21,6 +21,7 @@ const RECONNECT_MAX_ATTEMPTS = 8;
 export function useAgentStream() {
   const mode = useUIStore((s) => s.mode);
   const bridgeUrl = useUIStore((s) => s.bridgeUrl);
+  const bridgeKey = useUIStore((s) => s.bridgeKey);
 
   const [events, setEvents] = useState<CitadelEvent[]>([]);
   const [status, setStatus] = useState<RunStatus>("idle");
@@ -88,7 +89,7 @@ export function useAgentStream() {
   const connect = useCallback(
     (id: string) => {
       setConnection((c) => (c === "closed" ? "connecting" : c));
-      const url = new URL(citadelApi.streamUrl(bridgeUrl, id));
+      const url = new URL(citadelApi.streamUrl(bridgeUrl, id, bridgeKey));
       if (lastEventId.current) url.searchParams.set("last_event_id", lastEventId.current);
       const es = new EventSource(url.toString());
       source.current = es;
@@ -142,7 +143,7 @@ export function useAgentStream() {
         timers.current.push(iv as unknown as ReturnType<typeof setTimeout>);
       };
     },
-    [bridgeUrl, push],
+    [bridgeUrl, bridgeKey, push],
   );
 
   const reconnect = useCallback(() => {

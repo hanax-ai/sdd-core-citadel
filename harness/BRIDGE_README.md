@@ -12,24 +12,21 @@ python harness/bridge.py          # http://127.0.0.1:8000
 
 ## Auth
 
-Every route requires a shared secret sent as the `X-Bridge-Key` request
-header, checked against the `BRIDGE_API_KEY` env var with a constant-time
-comparison (`hmac.compare_digest`). This is a bridge-level addition, not
-part of the harness's own contract -- it exists because the bridge listens
-on a local TCP port with no other access control.
+Every route requires a shared secret, checked against the `BRIDGE_API_KEY`
+env var with a constant-time comparison (`hmac.compare_digest`). This is a
+bridge-level addition, not part of the harness's own contract -- it exists
+because the bridge listens on a local TCP port with no other access control.
 
 - `BRIDGE_API_KEY` (required) -- the shared secret. The server refuses to
   start (fails fast, same pattern as the provider key checks in
   `harness/llm_clients.py`) if this is unset.
-- Every request must send `X-Bridge-Key: <the same value>`, or the bridge
-  responds `401 Unauthorized`.
-- Note: browsers' native `EventSource` API cannot set custom request
-  headers. If the dashboard wires up `GET /api/stream/{run_id}` with a
-  plain `new EventSource(url)`, it will not be able to send `X-Bridge-Key`
-  and will get a 401. Use a fetch-based SSE reader (one that can set
-  headers) for that endpoint, or extend the auth check to also accept the
-  key as a query parameter -- not implemented here, since this bridge picks
-  header-only auth for simplicity.
+- Every request must send `X-Bridge-Key: <the same value>` as a request
+  header, or the bridge responds `401 Unauthorized`.
+- Every route also accepts the key as a `?key=` query param instead of the
+  header (the header wins if both are present). This exists for
+  `GET /api/stream/{run_id}`: browsers' native `EventSource` API cannot set
+  custom request headers, so the dashboard's `new EventSource(url)` call
+  authenticates via `?key=` instead.
 
 ## target_dir allowlist
 

@@ -13,6 +13,7 @@ import {
   type Transcript,
 } from "./contract";
 import { DEMO_LOGS, DEMO_RAID, DEMO_STATUS, DEMO_TRANSCRIPT } from "./fixtures";
+import { useUIStore } from "@/stores/useUIStore";
 import { z } from "zod";
 
 export class BridgeError extends Error {
@@ -31,11 +32,19 @@ async function bridgeFetch<S extends z.ZodTypeAny>(
   schema: S,
   init?: RequestInit,
 ): Promise<z.infer<S>> {
+  // Read directly from the store rather than threading a `bridgeKey` param
+  // through every citadelApi call site -- this is a plain function (not a
+  // hook), and a one-shot read at fetch-time is all a request needs.
+  const bridgeKey = useUIStore.getState().bridgeKey;
   let res: Response;
   try {
     res = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(bridgeKey ? { "X-Bridge-Key": bridgeKey } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch {
     throw new BridgeError(
@@ -50,8 +59,12 @@ async function bridgeFetch<S extends z.ZodTypeAny>(
 }
 
 export const citadelApi = {
-  streamUrl: (baseUrl: string, runId: string) =>
-    `${baseUrl.replace(/\/$/, "")}/api/stream/${encodeURIComponent(runId)}`,
+  streamUrl: (baseUrl: string, runId: string, bridgeKey?: string) => {
+    const url = `${baseUrl.replace(/\/$/, "")}/api/stream/${encodeURIComponent(runId)}`;
+    // EventSource can't set custom headers, so the key travels as a query
+    // param instead -- must match the backend's `?key=` fallback exactly.
+    return bridgeKey ? `${url}?key=${encodeURIComponent(bridgeKey)}` : url;
+  },
 
   async runTask(baseUrl: string, req: RunTaskRequest) {
     return bridgeFetch(baseUrl, "/api/run-task", runTaskResponseSchema, {
