@@ -45,15 +45,17 @@ async def _call_with_fallback(request, *, model: str, role: str, label: str, err
     try the primary call; on a quota/rate-limit error, look up a per-role
     fallback base_url/model/key triple from the environment and retry once;
     raise a clear RuntimeError at every failure point. Returns
-    (response, fallback_used).
+    (response, fallback_fields), where fallback_fields splices straight into a
+    caller's result dict and carries `fallback_reason` only on fallback.
 
     `request` is the provider's `_request(base_url, request_model, request_key)`
-    closure. `error_cls` is the SDK exception type to catch. `is_quota(exc)`
+    closure. `error_cls` is the SDK exception type -- or tuple of types -- to
+    catch. `is_quota(exc)`
     decides whether a caught exception is a quota/rate-limit condition worth
     falling back on (as opposed to any other provider error, which fails
     fast with no fallback attempt)."""
     try:
-        return await request(None, model), False
+        return await request(None, model), {"fallback_used": False}
     except error_cls as exc:
         if not is_quota(exc):
             raise RuntimeError(f"{label} call failed: {exc}") from exc
@@ -71,7 +73,7 @@ async def _call_with_fallback(request, *, model: str, role: str, label: str, err
                 f"{label} call failed: quota/rate-limit exceeded ({exc}); "
                 f"fallback endpoint also failed: {fallback_exc}"
             ) from fallback_exc
-        return response, True
+        return response, {"fallback_used": True, "fallback_reason": "quota_exceeded"}
 
 
 FINDINGS_JSON_SCHEMA = {
@@ -125,7 +127,7 @@ async def call_researcher(system: str, user: str) -> dict:
         finally:
             await client.close()
 
-    response, fallback_used = await _call_with_fallback(
+    response, fallback_fields = await _call_with_fallback(
         _request,
         model=model,
         role="RESEARCHER",
@@ -135,16 +137,13 @@ async def call_researcher(system: str, user: str) -> dict:
     )
 
     text = next((block.text for block in response.content if block.type == "text"), "")
-    result = {
+    return {
         "text": text,
         "input_tokens": response.usage.input_tokens,
         "output_tokens": response.usage.output_tokens,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
-        "fallback_used": fallback_used,
+        **fallback_fields,
     }
-    if fallback_used:
-        result["fallback_reason"] = "quota_exceeded"
-    return result
 
 
 async def call_builder(system: str, user: str) -> dict:
@@ -170,7 +169,7 @@ async def call_builder(system: str, user: str) -> dict:
         finally:
             await client.close()
 
-    response, fallback_used = await _call_with_fallback(
+    response, fallback_fields = await _call_with_fallback(
         _request,
         model=model,
         role="BUILDER",
@@ -179,16 +178,13 @@ async def call_builder(system: str, user: str) -> dict:
         is_quota=lambda exc: isinstance(exc, openai.RateLimitError),
     )
 
-    result = {
+    return {
         "text": response.output_text or "",
         "input_tokens": response.usage.input_tokens if response.usage else 0,
         "output_tokens": response.usage.output_tokens if response.usage else 0,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
-        "fallback_used": fallback_used,
+        **fallback_fields,
     }
-    if fallback_used:
-        result["fallback_reason"] = "quota_exceeded"
-    return result
 
 
 def _validate_findings(findings, raw_text: str) -> list[dict]:
@@ -224,6 +220,7 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     from google import genai
     from google.genai import errors as genai_errors
     from google.genai import types as genai_types
+    import httpx
 
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
     started = time.monotonic()
@@ -246,12 +243,14 @@ async def call_gatekeeper(system: str, user: str) -> dict:
         finally:
             await client.aio.aclose()
 
-    response, fallback_used = await _call_with_fallback(
+    response, fallback_fields = await _call_with_fallback(
         _request,
         model=model,
         role="GATEKEEPER",
         label="Amigo-Gatekeeper (Gemini)",
-        error_cls=genai_errors.APIError,
+        # genai's APIError subclasses Exception directly, so unlike the Anthropic
+        # and OpenAI base classes it does not cover httpx transport failures.
+        error_cls=(genai_errors.APIError, httpx.HTTPError),
         is_quota=_is_gemini_quota_error,
     )
 
@@ -264,14 +263,11 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     findings = _validate_findings(findings, raw_text)
 
     usage = getattr(response, "usage_metadata", None)
-    result = {
+    return {
         "text": raw_text,
         "findings": findings,
         "input_tokens": getattr(usage, "prompt_token_count", 0) or 0,
         "output_tokens": getattr(usage, "candidates_token_count", 0) or 0,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
-        "fallback_used": fallback_used,
+        **fallback_fields,
     }
-    if fallback_used:
-        result["fallback_reason"] = "quota_exceeded"
-    return result

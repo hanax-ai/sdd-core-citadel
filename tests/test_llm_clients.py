@@ -374,7 +374,7 @@ async def test_call_builder_fallback_base_url_without_fallback_key_does_not_acti
     assert len(fake_cls.construct_calls) == 1
 
 
-def _make_fake_gemini_fallback_client(*, fail_with=None, raw_text='{"findings": []}'):
+def _make_fake_gemini_fallback_client(*, fail_with=None, fallback_fail_with=None, raw_text='{"findings": []}'):
     """Stand-in for google.genai.Client, geared toward the fallback tests:
     records constructor kwargs (to inspect http_options.base_url) and each
     generate_content call's kwargs (to inspect the model requested)."""
@@ -388,6 +388,8 @@ def _make_fake_gemini_fallback_client(*, fail_with=None, raw_text='{"findings": 
         invocations["n"] += 1
         if invocations["n"] == 1 and fail_with is not None:
             raise fail_with
+        if invocations["n"] == 2 and fallback_fail_with is not None:
+            raise fallback_fail_with
         return response
 
     class FakeClient:
@@ -500,3 +502,46 @@ async def test_call_gatekeeper_fallback_base_url_without_fallback_key_does_not_a
         await llm_clients.call_gatekeeper("system", "user")
 
     assert len(fake_cls.construct_calls) == 1
+
+
+async def test_call_gatekeeper_transport_error_becomes_contextual_runtime_error(monkeypatch):
+    # genai's APIError does not cover httpx failures, so a connection error used
+    # to escape as a raw httpx exception instead of the harness error format.
+    import httpx
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_BASE_URL", "http://localhost:8083/v1")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_API_KEY", "fallback-key")
+    fake_cls = _make_fake_gemini_fallback_client(fail_with=httpx.ConnectError("connection refused"))
+    monkeypatch.setattr("google.genai.Client", fake_cls)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await llm_clients.call_gatekeeper("system", "user")
+
+    assert "Amigo-Gatekeeper (Gemini) call failed" in str(excinfo.value)
+    assert "connection refused" in str(excinfo.value)
+    # A transport failure is not a quota condition, so no fallback is attempted.
+    assert "quota" not in str(excinfo.value).lower()
+    assert len(fake_cls.construct_calls) == 1
+
+
+async def test_call_gatekeeper_fallback_transport_error_becomes_contextual_runtime_error(monkeypatch):
+    import httpx
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_BASE_URL", "http://localhost:8083/v1")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_API_KEY", "fallback-key")
+    fake_cls = _make_fake_gemini_fallback_client(
+        fail_with=_gemini_quota_error(),
+        fallback_fail_with=httpx.ConnectError("fallback unreachable"),
+    )
+    monkeypatch.setattr("google.genai.Client", fake_cls)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        await llm_clients.call_gatekeeper("system", "user")
+
+    assert "fallback endpoint also failed" in str(excinfo.value)
+    assert "fallback unreachable" in str(excinfo.value)
+    assert len(fake_cls.construct_calls) == 2
