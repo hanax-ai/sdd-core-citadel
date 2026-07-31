@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ROLE_TO_AGENT,
+  roleToAgent,
   parseSseEvent,
   type CitadelEvent,
   type Finding,
@@ -247,7 +247,9 @@ export function deriveRunState(events: CitadelEvent[]) {
 
   const messages = events.filter((e) => e.type === "agent_message");
   const invocations = messages.filter(
-    (e) => e.type === "agent_message" && ROLE_TO_AGENT[e.agent] !== "system",
+    // Provider-independent: only the Harness role maps to "system", and the
+    // Gatekeeper never does, whichever provider serves it. Default arg is fine.
+    (e) => e.type === "agent_message" && roleToAgent(e.agent) !== "system",
   ).length;
 
   return { stage, tokens, verdict, patchText, rounds, findings, invocations };

@@ -3,7 +3,7 @@ import { AppShell } from "@/components/citadel/AppShell";
 import { useSystemStatus } from "@/components/citadel/KeyWarningBanner";
 import { StatusPill } from "@/components/citadel/pills";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AGENT_META } from "@/lib/citadel/contract";
+import { AGENT_META, type AgentId } from "@/lib/citadel/contract";
 import { useUIStore } from "@/stores/useUIStore";
 
 export const Route = createFileRoute("/system")({
@@ -27,16 +27,34 @@ export const Route = createFileRoute("/system")({
   component: SystemPage,
 });
 
+/** [agent, key present, configured model, env var that supplies the key] */
+type ProviderRow = readonly [AgentId, boolean, string, string];
+
 function SystemPage() {
   const { mode, bridgeUrl } = useUIStore();
   const { data, isLoading, error } = useSystemStatus();
 
-  const rows = data
-    ? ([
+  // Only the ACTIVE gatekeeper provider gets a card -- the bridge reports both
+  // gemini_* and moonshot_* as raw facts, and showing the idle one as "KEY
+  // MISSING" is the false alarm this page existed to prevent. On an
+  // unrecognised GATEKEEPER_PROVIDER no gatekeeper card is shown at all: no
+  // provider serves the role, so any key/model claim would be a fiction.
+  // /api/system/health carries the real diagnosis.
+  const gatekeeperRow: ProviderRow | null =
+    data == null
+      ? null
+      : data.gatekeeper_provider === "kimi"
+        ? ["kimi", data.moonshot_key_present, data.moonshot_model, "MOONSHOT_API_KEY"]
+        : data.gatekeeper_provider === "gemini"
+          ? ["gemini", data.gemini_key_present, data.gemini_model, "GEMINI_API_KEY"]
+          : null;
+
+  const rows: ProviderRow[] = data
+    ? [
         ["claude", data.anthropic_key_present, data.anthropic_model, "ANTHROPIC_API_KEY"],
         ["codex", data.openai_key_present, data.openai_model, "OPENAI_API_KEY"],
-        ["gemini", data.gemini_key_present, data.gemini_model, "GEMINI_API_KEY"],
-      ] as const)
+        ...(gatekeeperRow ? [gatekeeperRow] : []),
+      ]
     : [];
 
   return (
@@ -79,6 +97,27 @@ function SystemPage() {
             </dl>
           </article>
         ))}
+
+        {/* The card the gatekeeper row cannot fill. Suppressing the key/model
+            claim is right -- we genuinely do not know which provider was meant
+            -- but leaving a silent hole in a 3-column grid on the page whose
+            job is provider config reads as "nothing to report". Naming the
+            misconfiguration is not a key claim. */}
+        {data && gatekeeperRow === null && (
+          <article className="glass rounded-lg border-destructive/40 p-5">
+            <p className="text-sm font-medium">Gatekeeper</p>
+            <p className="text-xs text-muted-foreground">Quality Auditor</p>
+            <div className="mt-3">
+              <StatusPill label="PROVIDER UNKNOWN" tone="danger" />
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              <code className="font-mono">GATEKEEPER_PROVIDER</code> holds an unrecognised value, so
+              no provider will serve this role and no key or model can be reported. Valid values are{" "}
+              <code className="font-mono">gemini</code> (default) and{" "}
+              <code className="font-mono">kimi</code>.
+            </p>
+          </article>
+        )}
       </div>
 
       <div className="glass rounded-lg p-5 text-sm leading-relaxed text-muted-foreground">
