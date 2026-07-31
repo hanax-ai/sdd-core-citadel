@@ -8,6 +8,7 @@ JSON transcript to logs/.
 from __future__ import annotations
 import json
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -29,9 +30,14 @@ def _slugify(text: str) -> str:
 
 def _extract_focus_files(task_description: str, target_dir: Path) -> list[Path]:
     """Find file paths named in the task that actually exist under target_dir."""
+    root = target_dir.resolve()
     found = []
     for token in _PATH_TOKEN.findall(task_description):
-        candidate = (target_dir / token.replace("\\", "/")).resolve()
+        candidate = (root / token.replace("\\", "/")).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
         if candidate.is_file() and candidate not in found:
             found.append(candidate)
     return found
@@ -45,6 +51,8 @@ async def run_collaboration_cycle(
     on_event: Callable[[dict], None] | None = None,
 ) -> dict:
     """Run the researcher/builder/gatekeeper remediation cycle for the target task."""
+
+    run_id = run_id or uuid.uuid4().hex[:12]
 
     def emit(event_type: str, **fields) -> None:
         if on_event is None:
@@ -93,10 +101,11 @@ async def run_collaboration_cycle(
 
     log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    log_path = log_dir / f"{timestamp}_{_slugify(task_description)}.json"
+    log_path = log_dir / f"{timestamp}_{run_id}_{_slugify(task_description)}.json"
     log_path.write_text(
         json.dumps(
             {
+                "run_id": run_id,
                 "task": task_description,
                 "evidence": evidence,
                 "research_notes": notes,
@@ -110,6 +119,7 @@ async def run_collaboration_cycle(
     )
 
     result = {
+        "run_id": run_id,
         "task": task_description,
         "git_status": evidence["git_status"],
         "verdict": verdict,

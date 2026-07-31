@@ -124,3 +124,48 @@ async def test_file_named_in_task_is_read_into_evidence(tmp_path, monkeypatch):
     assert any("config.py" in p for p in paths)
     contents = [entry["content"] for entry in captured_evidence["file_evidence"]]
     assert any("real value" in c for c in contents)
+
+
+async def test_path_traversal_outside_target_dir_is_ignored(tmp_path, monkeypatch):
+    target = tmp_path / "workspace"
+    target.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("top-secret", encoding="utf-8")
+
+    captured_evidence = {}
+
+    async def fake_analyze(self, task, evidence):
+        captured_evidence.update(evidence)
+        return "notes"
+
+    async def fake_propose(self, *a, **k):
+        return "patch"
+
+    async def fake_review(self, *a, **k):
+        return []
+
+    monkeypatch.setattr(remediation_loop.AmigoResearcher, "analyze", fake_analyze)
+    monkeypatch.setattr(remediation_loop.AmigoBuilder, "propose_patch", fake_propose)
+    monkeypatch.setattr(remediation_loop.AmigoGatekeeper, "review", fake_review)
+
+    await run_collaboration_cycle(
+        target,
+        "Read ../secret.txt for context",
+        log_dir=tmp_path / "logs",
+    )
+
+    paths = [entry["path"] for entry in captured_evidence["file_evidence"]]
+    assert not any("secret.txt" in p for p in paths)
+
+
+async def test_run_id_is_generated_and_used_in_log_filename_when_not_provided(tmp_path, monkeypatch):
+    _patch_agents(monkeypatch, [[]])
+
+    result = await run_collaboration_cycle(tmp_path, "fix the bug", log_dir=tmp_path / "logs")
+
+    assert result["run_id"]
+    log_files = list((tmp_path / "logs").glob("*.json"))
+    assert len(log_files) == 1
+    assert result["run_id"] in log_files[0].name
+    logged = json.loads(log_files[0].read_text(encoding="utf-8"))
+    assert logged["run_id"] == result["run_id"]
