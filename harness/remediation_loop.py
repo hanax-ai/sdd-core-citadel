@@ -6,6 +6,7 @@ JSON transcript to logs/.
 """
 
 from __future__ import annotations
+import asyncio
 import json
 import re
 import uuid
@@ -26,6 +27,11 @@ _PATH_TOKEN = re.compile(r"[\w./\\-]+\.\w+")
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug[:50] or "task"
+
+
+def _write_transcript(log_dir: Path, log_path: Path, payload: dict) -> None:
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
 
 def _extract_focus_files(task_description: str, target_dir: Path) -> list[Path]:
@@ -102,23 +108,20 @@ async def run_collaboration_cycle(
 
     emit("stage_change", stage="VERDICT", verdict=verdict)
 
-    log_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     log_path = log_dir / f"{timestamp}_{run_id}_{_slugify(task_description)}.json"
-    log_path.write_text(
-        json.dumps(
-            {
-                "run_id": run_id,
-                "task": task_description,
-                "evidence": evidence,
-                "research_notes": notes,
-                "rounds": rounds,
-                "verdict": verdict,
-            },
-            indent=2,
-            default=str,
-        ),
-        encoding="utf-8",
+    await asyncio.to_thread(
+        _write_transcript,
+        log_dir,
+        log_path,
+        {
+            "run_id": run_id,
+            "task": task_description,
+            "evidence": evidence,
+            "research_notes": notes,
+            "rounds": rounds,
+            "verdict": verdict,
+        },
     )
 
     result = {
