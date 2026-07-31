@@ -13,7 +13,7 @@ Amigo Agents operate strictly outside governed target project packages. All temp
 
 ### Rule 2: Multi-Agent Role Clarity
 - **Amigo-Builder (Codex / Claude Code):** Focuses on code generation, diff synthesis, and test runner updates.
-- **Amigo-Gatekeeper (Gemini):** Focuses on substantive code reviews (`Directive-1.md`), cryptographic SHA-256 hash checks, strict JSON validation (`allow_nan=False`), and security threat audits.
+- **Amigo-Gatekeeper (Gemini):** Focuses on substantive code reviews, cryptographic SHA-256 hash checks, strict JSON validation (`allow_nan=False`), and security threat audits.
 - **Amigo-Researcher (Claude):** Focuses on deep documentation lookup, dependency graph mapping, and requirement traceability.
 
 ### Rule 3: Automated Remediation Feedback Loop
