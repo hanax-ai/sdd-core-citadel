@@ -13,3 +13,7 @@ env/
 .env.local
 .env.*.local
 
+# Docs and reviews (not version-controlled going forward)
+docs/
+reviews/
+
