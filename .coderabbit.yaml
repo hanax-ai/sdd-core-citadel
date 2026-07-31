@@ -1,0 +1,8 @@
+reviews:
+  path_filters:
+    # Historical implementation-plan docs contain frozen, point-in-time code
+    # blocks documenting what was originally specified -- not live source.
+    # Without this, CodeRabbit reviews those code blocks as if they were
+    # real diffs and repeatedly re-flags issues already fixed in the real
+    # source files.
+    - "!docs/superpowers/plans/**"
