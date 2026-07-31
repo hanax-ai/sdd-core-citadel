@@ -7,6 +7,7 @@ a target directory and task.
 
 from __future__ import annotations
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -68,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     
     target_path = Path(args.target_dir)
     from harness.remediation_loop import run_collaboration_cycle
-    result = run_collaboration_cycle(target_path, args.task)
+    result = asyncio.run(run_collaboration_cycle(target_path, args.task))
 
     print(f"\n✨ Amigo Agents Collaboration Cycle Complete! Verdict: {result['verdict']}")
     print(f"📄 Transcript: {result['log_path']}")
