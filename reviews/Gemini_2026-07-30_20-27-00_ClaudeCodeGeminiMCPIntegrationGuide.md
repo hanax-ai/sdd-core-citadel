@@ -58,19 +58,54 @@ When prompting Claude Code natively, it automatically invokes specialized backgr
 2. **`gemini_code_review` Script:** Feeds script blocks directly into Gemini's API to evaluate security vulnerabilities, SQL injection entry points, and performance constraints from an alternative model perspective.
 3. **`gemini_brainstorm` Script:** Invokes Gemini to outline multiple architectural solutions for a problem before Claude begins executing local file writes.
 
-### 🎯 Natural Language & Tool Triggers in Claude Code
+### 🔍 Verification & Server Registration
 
-You do not need to drop out of your terminal workflow to use them. You can type natural language or target specific tool prefixes inside your Claude session:
+Before invoking script mechanics, verify that Claude Code natively lists your active Model Context Protocol (MCP) server hooks:
+
+#### 1. In-Session Verification Command
+While actively running a `claude` session, type the following into your console to list all registered tools:
 
 ```bash
-# Example: Targeting specific Gemini script via Claude's MCP environment
-mcp__gemini-collab__ask_gemini prompt: "Scan the entire backend folder and check for SQL injection entry points."
-
-# Example: Running a targeted security review script
-mcp__gemini-collab__gemini_code_review code: "def verify(user): return user.token == env.SECRET" focus: "security"
+/mcp
 ```
 
-*(Note: With RLabs Gemini MCP, Claude can execute multimodal scripts, e.g.: `"Use Gemini to analyze the layout of this local UI mockup image."`)*
+*(Alternatively, run `claude mcp list` directly in your terminal to see a clean printout of active environments).*
+
+#### 2. Local File System & Environment Verification
+Because the server deploys locally to your machine, you can run Python script verification in your terminal to confirm the server logic can query your `google-generativeai` SDK setup:
+
+```bash
+# Check if execution directory and server logic exist
+ls -la ~/.claude-mcp-servers/gemini-collab/
+
+# Verify Python can successfully import the Gemini API architecture
+python3 -c "import google.generativeai as genai; print('Gemini SDK is functional!')"
+```
+
+If the server drops connection, run the global user-scope reset script:
+
+```bash
+claude mcp remove gemini-collab
+claude mcp add --scope user gemini-collab python3 ~/.claude-mcp-servers/gemini-collab/server.py
+```
+
+### 🖼️ Multimodal Image Analysis Scripts
+
+The RLabs Gemini MCP and the global Gemini MCP tool expose native multimodal tool bindings directly to Claude. When analyzing local mockups, layout screenshots, or technical wireframes, pass local file paths directly into the workflow:
+
+#### Option A: Natural Language Execution
+Claude Code parses your explicit file tree dynamically and forwards images over the MCP bridge:
+
+> *"Use the Gemini tool to look at the UI layout screenshot at `./docs/mockup.png` and tell me what CSS components are missing from my `App.tsx` file."*
+
+#### Option B: Precise Tool Calling Syntax
+To manually route file arguments into explicit tool namespaces inside a Claude session:
+
+```bash
+mcp__gemini-collab__ask_gemini prompt: "Analyze the attached database-schema.jpg image and write the corresponding Prisma model syntax definitions."
+```
+
+*(Note: Ensure terminal directory references match your relative app space so Claude can grab target imagery bytes instantly before hitting the Gemini API endpoint).*
 
 ### 🤖 Automated Dynamic Workflows (Advanced Setup)
 
@@ -171,6 +206,7 @@ codex mcp add <server-name> --url <mcp-server-url>
 
 ## 📚 References & Resources
 
+- [Google Gemini API Coding Agents Documentation](https://ai.google.dev/gemini-api/docs/coding-agents)
 - [Claude Code Gemini MCP Server Repository](https://github.com/RaiAnsar/claude_code-gemini-mcp)
 - [RLabs Gemini MCP Repository](https://github.com/rlabs-inc/gemini-mcp)
 - [Gemini MCP Integration Skills](https://mcpmarket.com/tools/skills/gemini-integration-for-claude)
