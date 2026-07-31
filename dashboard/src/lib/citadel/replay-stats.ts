@@ -99,7 +99,6 @@ export function eventsToCsv(events: ReplayEvent[], meta: CsvMeta = {}): string {
   return [...header, CSV_COLUMNS.join(","), ...rows].join("\n");
 }
 
-
 export type ReplaySummary = {
   count: number;
   byAgent: { key: string; count: number }[];

@@ -25,20 +25,14 @@ export function useAmigoRun() {
     setElapsed(0);
     setStatus("running");
     const startedAt = Date.now();
-    ticker.current = setInterval(
-      () => setElapsed(Date.now() - startedAt),
-      100,
-    );
+    ticker.current = setInterval(() => setElapsed(Date.now() - startedAt), 100);
 
     let offset = 400;
     SCRIPTED_RUN.forEach((e, i) => {
       offset += 900 + Math.min(e.latencyMs, 2600) * 0.5;
       timers.current.push(
         setTimeout(() => {
-          setEvents((prev) => [
-            ...prev,
-            { ...e, id: `${startedAt}-${i}`, ts: Date.now() },
-          ]);
+          setEvents((prev) => [...prev, { ...e, id: `${startedAt}-${i}`, ts: Date.now() }]);
           if (i === SCRIPTED_RUN.length - 1) {
             setStatus("complete");
             if (ticker.current) clearInterval(ticker.current);

@@ -21,9 +21,7 @@ export function AgentStreamConsole({ run }: { run: Run }) {
       <section className="glass rounded-2xl overflow-hidden">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
           <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-muted-foreground">
-              amigo://stream
-            </span>
+            <span className="font-mono text-xs text-muted-foreground">amigo://stream</span>
             <StatusPill
               label={
                 run.status === "running"
@@ -86,9 +84,7 @@ export function AgentStreamConsole({ run }: { run: Run }) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <AgentBadge agent={e.agent} />
-                      <span className="text-xs text-muted-foreground">
-                        {AGENTS[e.agent].role}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{AGENTS[e.agent].role}</span>
                     </div>
                     <span className="text-[11px] text-muted-foreground">
                       {e.stage} · {(e.latencyMs / 1000).toFixed(2)}s
@@ -126,11 +122,7 @@ export function AgentStreamConsole({ run }: { run: Run }) {
                   <span
                     className={cn(
                       "size-2 rounded-full",
-                      done
-                        ? "bg-codex"
-                        : active
-                          ? "bg-primary live-dot"
-                          : "bg-muted-foreground/30",
+                      done ? "bg-codex" : active ? "bg-primary live-dot" : "bg-muted-foreground/30",
                     )}
                   />
                   <span

@@ -46,10 +46,7 @@ export function StageTracker({ stage, round }: { stage: Stage | null; round?: nu
               {showRound ? ` R${round}` : ""}
             </motion.span>
             {i < STAGE_TRACK.length - 1 && (
-              <span
-                aria-hidden
-                className={cn("h-px w-4", done ? "bg-codex/50" : "bg-border")}
-              />
+              <span aria-hidden className={cn("h-px w-4", done ? "bg-codex/50" : "bg-border")} />
             )}
           </li>
         );

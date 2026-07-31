@@ -64,8 +64,8 @@ export function TaskDispatcher({ run }: { run: ReturnType<typeof useAmigoRun> })
           <Rocket /> {run.status === "running" ? "Run in progress…" : "Start run"}
         </Button>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Zero-contamination: the harness never writes to the target repository. All patches
-          stay in memory for manual hand-application.
+          Zero-contamination: the harness never writes to the target repository. All patches stay in
+          memory for manual hand-application.
         </p>
       </div>
     </div>

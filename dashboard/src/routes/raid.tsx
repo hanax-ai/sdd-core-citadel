@@ -125,10 +125,7 @@ function RaidPage() {
               <div className="flex gap-1.5">
                 <dt>Status</dt>
                 <dd
-                  className={cn(
-                    "font-mono",
-                    i.status === "CLOSED" ? "text-codex" : "text-warning",
-                  )}
+                  className={cn("font-mono", i.status === "CLOSED" ? "text-codex" : "text-warning")}
                 >
                   {i.status}
                 </dd>
