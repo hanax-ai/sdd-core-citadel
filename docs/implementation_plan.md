@@ -112,13 +112,13 @@ flowchart TD
 Original scope (`harness/ui.py` Rich/Ink terminal progress bars) is superseded — a full web dashboard was built instead (`dashboard/`, TanStack Start + React) with a FastAPI bridge server (`harness/bridge.py`) exposing the harness over HTTP/SSE.
 - [x] Vendored in from Lovable AI delivery (commit `acace94`), then fixed across 3 rounds: `bridge.py` wired to the real `run_collaboration_cycle` (was a hardcoded mock), auth added (`X-Bridge-Key` header + query-param fallback scoped to the SSE route only), `target_dir` allowlisted, SQLite moved off the event loop, frontend SSE contract corrected to match real event shapes, reconnect backoff added, bridge-key entry UI added to `ConnectionControl.tsx`.
 - [x] Pushed to `hanax-ai/sdd-core-citadel` (origin remote), full history intact.
-- [ ] **Not yet done:** a real end-to-end run through the actual bridge + dashboard in Live mode (not Demo fixtures) — see Task 6.
-- [ ] `logs/session_logger.py` (full untruncated execution logs) — not built; `bridge.py`'s SQLite transcript storage may already cover this need, worth confirming it's sufficient before building a separate logger.
+- [x] Real end-to-end run through the actual bridge process (not TestClient/mocks) — completed 2026-07-31, `run_3656145f15`: `PASS`, 1 round, 8,091 tokens, real Claude/OpenAI/Gemini calls, correct minimal docstring patch produced, SSE stream verified event-for-event against the DB transcript, `git diff` empty on the target file afterward (propose-only held through the real HTTP surface for the first time, not just direct Python calls). Closes the open item in Task 4 above and RAID I1 fully. Dashboard UI click-through in Live mode (vs. API-level dispatch) still not done — lower priority now that the backend path is proven.
+- [ ] `logs/session_logger.py` (full untruncated execution logs) — not built; `bridge.py`'s SQLite transcript storage covers this for bridge-dispatched runs. `remediation_loop.py`'s own `logs/` JSON transcripts (CLI-dispatched runs) are a separate, older mechanism — 5 real transcripts already git-tracked from tonight, not gitignored; worth a decision (see `docs/RAID-LOG.md`).
 
-### Task 6: End-to-End Verification & Integration Test (`Phase 6`) — open, now higher priority
-- [ ] Run a real task through the live bridge + dashboard (not Demo mode) end-to-end: dispatch via the UI, confirm real SSE events stream correctly, confirm a genuine `PASS` verdict lands (closes the open item in Task 4 above and I1 fully).
-- [ ] Create `tools/test_harness.py` or equivalent automated end-to-end test — a simulated task run through the full stack, not just the 57 unit/integration tests that exist today.
-- [ ] Verify zero transient files written into any target project during a real run (propose-only guarantee, now actually exercised through the bridge's HTTP surface per RAID A2).
+### Task 6: End-to-End Verification & Integration Test (`Phase 6`) — mostly done
+- [x] Real task through the live bridge end-to-end — see above.
+- [ ] Create `tools/test_harness.py` or equivalent automated end-to-end test — a simulated task run through the full stack, not just the 57 unit/integration tests that exist today, so this doesn't have to be a manual subagent dispatch every time.
+- [x] Zero transient files written into the target project during a real run — verified: `git status --porcelain` empty after the real run.
 
 ---
 
