@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Amigo Agents Harness CLI Runner
-Collects git/task evidence for a target directory. Gate validation is
-performed by native SDD-Core tooling, not by this harness.
+Orchestrates the Researcher/Builder/Gatekeeper collaboration cycle for
+a target directory and task.
 """
 
 from __future__ import annotations
@@ -69,8 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     target_path = Path(args.target_dir)
     from harness.remediation_loop import run_collaboration_cycle
     result = run_collaboration_cycle(target_path, args.task)
-    
-    print("\n✨ Amigo Agents Collaboration Cycle Complete!")
+
+    print(f"\n✨ Amigo Agents Collaboration Cycle Complete! Verdict: {result['verdict']}")
+    print(f"📄 Transcript: {result['log_path']}")
+    print(f"\n--- Proposed Patch ---\n{result['patch_text']}")
     return 0
 
 
