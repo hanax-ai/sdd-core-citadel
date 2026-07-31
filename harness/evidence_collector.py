@@ -5,7 +5,7 @@ BEFORE invoking LLMs to ensure zero-hallucination evidence-driven workflows.
 """
 
 from __future__ import annotations
-import json
+import ast
 from pathlib import Path
 from tools.git_adapter import get_git_status, get_git_diff
 from tools.linter_adapter import validate_json_syntax, compute_file_sha256
@@ -20,7 +20,16 @@ def collect_task_evidence(target_dir: Path, focus_files: list[Path] | None = Non
     if focus_files:
         for f in focus_files:
             if f.is_file():
-                syntax_valid, syntax_err = validate_json_syntax(f) if f.suffix == ".json" else (True, "OK")
+                if f.suffix == ".json":
+                    syntax_valid, syntax_err = validate_json_syntax(f)
+                elif f.suffix == ".py":
+                    try:
+                        ast.parse(f.read_text(encoding="utf-8"))
+                        syntax_valid, syntax_err = True, "OK"
+                    except SyntaxError as exc:
+                        syntax_valid, syntax_err = False, str(exc)
+                else:
+                    syntax_valid, syntax_err = True, "NOT_CHECKED"
                 file_evidence.append({
                     "path": str(f.relative_to(target_dir) if f.is_relative_to(target_dir) else f),
                     "size_bytes": f.stat().st_size,
