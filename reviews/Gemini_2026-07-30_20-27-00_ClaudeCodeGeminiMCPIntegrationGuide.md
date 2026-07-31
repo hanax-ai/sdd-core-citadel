@@ -14,6 +14,35 @@ Multiple community-built Model Context Protocol (MCP) servers allow **Claude Cod
 
 By linking these AI ecosystems via MCP, Claude Code can leverage Gemini's 1M+ token context window, multimodal visual analysis, and specialized Google Search grounding features, while simultaneously utilizing OpenAI Codex as an automated secondary auditor and "devil's advocate" reviewer directly within your terminal workspace.
 
+### 🌐 Global Multi-Provider Architecture Flow
+
+```mermaid
+flowchart TD
+    subgraph Client ["Developer Workspace Console"]
+        CC["Claude Code Terminal Engine"]
+    end
+
+    subgraph ConfigSync ["Shared Configuration Layer"]
+        JSON["~/.claude/settings.json (JSON)"] <--> CC
+        TOML["~/.codex/config.toml (TOML)"] <--> CodexCLI["Codex CLI / Extension"]
+    end
+
+    subgraph Subsystems ["MCP Subsystem Integration"]
+        CC -->|"mcp__gemini-collab__ask_gemini (Stdio)"| GeminiEngine["Google Gemini 2.0 / Flash<br/>(Macro Architect: 1M+ Token Window)"]
+        CC -->|"/codex adversarial-review (Background)"| CodexEngine["OpenAI Codex Engine<br/>(QA Red Team: Security & Edge Case Audit)"]
+    end
+
+    subgraph Flow ["Cross-Agent Pipeline Cycle"]
+        GeminiEngine -->|"High-Context Structural Map"| CC
+        CC -->|"Draft Engineering Roadmap"| CodexEngine
+        CodexEngine -->|"Adversarial Audit & Red Team Flaws"| CC
+        CC -->|"Verified Local File Writes"| Disk["Local Workspace Code Repository"]
+    end
+
+    classDef passStyle fill:#064e3b,stroke:#10b981,color:#fff,font-weight:bold;
+    Disk:::passStyle
+```
+
 ---
 
 ## 🌐 Part 1: Linking Claude Code to Google Gemini
