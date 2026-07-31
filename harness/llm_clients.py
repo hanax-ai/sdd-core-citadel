@@ -10,7 +10,7 @@ import os
 
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.3-codex"
-DEFAULT_GEMINI_MODEL = "gemini-flash-latest"
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
 
 
 def call_researcher(system: str, user: str) -> str:
@@ -65,11 +65,18 @@ def call_gatekeeper(system: str, user: str) -> str:
 
     from google import genai
     from google.genai import errors as genai_errors
+    from google.genai import types as genai_types
 
     client = genai.Client(api_key=api_key)
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
     try:
-        response = client.models.generate_content(model=model, contents=f"{system}\n\n{user}")
+        response = client.models.generate_content(
+            model=model,
+            contents=f"{system}\n\n{user}",
+            config=genai_types.GenerateContentConfig(
+                thinking_config=genai_types.ThinkingConfig(thinking_level="HIGH"),
+            ),
+        )
     except genai_errors.APIError as exc:
         raise RuntimeError(f"Amigo-Gatekeeper (Gemini) call failed: {exc}") from exc
     return response.text or ""
