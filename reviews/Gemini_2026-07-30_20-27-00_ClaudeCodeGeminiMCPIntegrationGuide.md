@@ -68,7 +68,7 @@ flowchart TD
 
 ## ⚡ Part 2: Linking Claude Code to OpenAI Codex
 
-To run Claude Code and OpenAI Codex together, you can share MCP configurations so both CLI agents utilize the same tools, and use the official **[OpenAI Codex Plugin](https://community.openai.com/t/introducing-codex-plugin-for-claude-code/1378186)** to orchestrate cross-provider code reviews.
+When you install the official **[OpenAI Codex Plugin for Claude Code (`openai/codex-plugin-cc`)](https://github.com/openai/codex-plugin-cc)**, it maps the capabilities of the OpenAI Codex engine directly into your Claude terminal. This lets you run multi-agent workflows, shifting heavy or highly critical evaluation jobs to a fine-tuned reasoning model like `codex-1` without dropping out of your Claude workflow.
 
 ### 🔗 One-Line Installation
 
@@ -89,55 +89,61 @@ claude mcp add codex -- codex-mcp-server
 
 ### 🔀 Shared MCP Server Configuration (Claude Code vs Codex CLI)
 
-Claude Code reads its local tool integrations from a JSON file, while Codex uses a TOML structure. Below is the exact syntax for sharing a tool (such as a database or scanner) across both CLI platforms:
+Claude Code and OpenAI Codex CLI do not automatically sync their configurations. Claude reads its integrations from a local JSON file (`~/.claude/settings.json`), while Codex looks at a global or project-level TOML file (`~/.codex/config.toml` or `~/.config/codex/config.toml`).
 
-#### 1. Claude Code Syntax (`~/.claude/settings.json`)
-Claude connects to servers via local processes (`stdio`) using standard JSON:
+If you want both coding agents to have access to the exact same background tool (like an app router, database, or browser automation), you must wire them into both paths:
+
+#### 1. Claude Code Config (`~/.claude/settings.json`)
+Claude connects via standard `stdio` transport using standard JSON:
 
 ```json
 {
   "mcpServers": {
-    "shared-tool": {
+    "composio-router": {
       "command": "npx",
       "args": [
         "-y",
-        "example-mcp-server"
+        "@composio/mcp-gateway"
       ],
       "env": {
-        "API_KEY": "your_secret_key_here"
+        "COMPOSIO_API_KEY": "your_key_here"
       }
     }
   }
 }
 ```
 
-#### 2. Codex CLI Syntax (`~/.codex/config.toml`)
-To wire the exact same tool into Codex CLI or its VS Code extension, map the keys to TOML syntax under `[MCP_servers]`:
+#### 2. Codex Config (`~/.codex/config.toml` or `~/.config/codex/config.toml`)
+To provision the exact same tool for the Codex CLI or its VS Code extension, map those same execution fields into `[mcp_servers]` TOML blocks:
 
 ```toml
-[MCP_servers.shared-tool]
+[mcp_servers.composio-router]
 command = "npx"
-args = ["-y", "example-mcp-server"]
+args = ["-y", "@composio/mcp-gateway"]
+enabled = true
 
-[MCP_servers.shared-tool.env]
-API_KEY = "your_secret_key_here"
+[mcp_servers.composio-router.env]
+COMPOSIO_API_KEY = "your_key_here"
 ```
 
-*(Alternatively, you can register a remote cloud service into Codex using the CLI: `codex mcp add shared-tool --url https://example.com`)*.
+*(Alternatively, you can register a remote cloud-based service into Codex using the CLI: `codex mcp add composio-router --url https://example.com`)*.
 
 ---
 
 ## 🤖 Part 3: Codex Commands & Review Workflows in Claude Code
 
-Once linked as a plugin inside Claude Code (`claude mcp add codex -- codex-mcp-server`), you gain specialized slash commands in your Claude terminal:
+The official Codex Plugin grants you access to **7 key slash commands** and modifiers inside your Claude terminal:
 
 | Slash Command / Modifier | Operational Function & Purpose |
 | :--- | :--- |
-| **`/codex review`** | Instructs Codex to perform a polite, non-destructive audit of your changes. Acts strictly as an evaluator, identifying flaws, bugs, or anti-patterns without editing source code. |
-| **`/codex adversarial review`** | Forces Codex to act as a harsh "devil's advocate" against Claude's code planning. Deliberately tries to break proposed architecture, exposing edge cases, security flaws, or scaling bottlenecks before coding starts. |
-| **`/codex rescue`** | Triggers a holistic, codebase-wide sweep rather than evaluating single targeted files. Maps out macro-level architectural drift and code health summaries. |
-| **`-- background`** *(Modifier)* | Appended to any Codex audit (e.g., `/codex review -- background`). Shifts heavy computational checks to the background so you can continue prompting Claude uninterrupted. |
-| **`/codex status` & `/codex result`** | `/codex status` checks if background processing is active; `/codex result` fetches the complete audit report to pass OpenAI's feedback directly back into Claude's prompt context. |
+| **`/codex review`** | Instructs Codex to perform a polite, read-only audit of your active git changes or specified files. Flags potential syntax or logical errors without modifying source files. |
+| **`/codex adversarial-review`** | Enlists Codex as a strict "devil's advocate" against a plan or architectural approach Claude Code just generated. Deliberately tries to spot edge cases, security vulnerabilities, or infrastructure assumptions Claude missed. |
+| **`/codex rescue`** | Triggers an extensive, codebase-wide audit rather than target-scanning single modules. Evaluates macro file dependencies, maps out larger architecture drift, and allows plain-English problem prompts. |
+| **`/codex setup`** | Initializes, checks, or re-authenticates your local Codex session, pairing credentials from your ChatGPT subscription or OpenAI API key directly inside the plugin context. |
+| **`-- background`** *(Dash Modifier)* | Appended to heavy sweeps (e.g., `/codex rescue -- background`). Forces the process to handle long-token tasks asynchronously in the cloud sandbox so your main Claude Code CLI terminal doesn't lock up. |
+| **`/codex status`** | Checks the real-time compilation or audit status of a background job you previously spun up. |
+| **`/codex results`** | Fetches the completed analysis from your finished background job and pipes OpenAI's evaluation directly into your active Claude session context. |
+| **`/codex cancel`** | Immediately kills a running background execution or pending evaluation queue to prevent unnecessary token consumption. |
 
 ---
 
@@ -153,15 +159,13 @@ codex mcp add <server-name> --url <mcp-server-url>
 
 ## 📚 References & Resources
 
+- [Official OpenAI Codex Plugin Repository (`openai/codex-plugin-cc`)](https://github.com/openai/codex-plugin-cc)
+- [OpenAI Codex Plugin Announcement](https://community.openai.com/t/introducing-codex-plugin-for-claude-code/1378186)
+- [Syncing Codex & Claude Configs](https://community.openai.com/t/sync-codex-and-claude-code-configs-skills-agents-mcp-permissions/1380517)
 - [Gemini MCP Server Reddit Overview](https://www.reddit.com/r/ClaudeCode/comments/1lxqlki/gemini_mcp_server_utilise_googles_1m_token/)
 - [Gemini MCP Tool GitHub Repository](https://github.com/jamubc/gemini-mcp-tool)
-- [MCP Market — Gemini Code Assist](https://mcpmarket.com/server/gemini-code-assist)
-- [Gemini CLI Skills Documentation](https://skillsllm.com/skill/gemini-cli)
-- [Composio Gemini Framework for Claude Code](https://composio.dev/toolkits/gemini/framework/claude-code)
-- [OpenAI Codex Plugin Announcement](https://community.openai.com/t/introducing-codex-plugin-for-claude-code/1378186)
 - [Claude Code & Codex Setup Guide](https://www.mostlyserious.io/insights/claude-code-codex-guide-nontechnical)
 - [Claude Code & Codex MCP Reddit Discussion](https://www.reddit.com/r/ClaudeCode/comments/1qwd8zs/is_anybody_else_using_claude_code_with_codex_mcp/)
-- [Syncing Codex & Claude Configs](https://community.openai.com/t/sync-codex-and-claude-code-configs-skills-agents-mcp-permissions/1380517)
 - [Codex CLI config.toml Deep Dive](https://ofox.ai/blog/codex-cli-config-toml-deep-dive/)
 - [Setting up MCP in Codex CLI TOML Guide](https://www.reddit.com/r/ChatGPTCoding/comments/1n3y2vq/setting_up_mcp_in_codex_is_easy_dont_let_the_toml/)
 
