@@ -18,6 +18,9 @@ SYSTEM_PROMPT = (
 class AmigoBuilder:
     """Code patch proposer. Output is a text diff, never applied automatically."""
 
+    def __init__(self):
+        self.last_usage: dict = {}
+
     async def propose_patch(
         self,
         task: str,
@@ -39,4 +42,9 @@ class AmigoBuilder:
             f"Prior reviewer findings to address:\n{findings_text}"
         )
         result = await call_builder(SYSTEM_PROMPT, user)
+        self.last_usage = {
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"],
+            "elapsed_ms": result["elapsed_ms"],
+        }
         return result["text"]

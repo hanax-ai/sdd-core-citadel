@@ -67,6 +67,7 @@ async def run_collaboration_cycle(
     emit("stage_change", stage="RESEARCHING", agent="Researcher")
     notes = await researcher.analyze(task_description, evidence)
     emit("agent_message", agent="Researcher", message_type="RESEARCH_NOTES", content=notes)
+    emit("token_metric", agent="Researcher", **researcher.last_usage)
 
     builder = AmigoBuilder()
     gatekeeper = AmigoGatekeeper()
@@ -80,6 +81,7 @@ async def run_collaboration_cycle(
         emit("stage_change", stage=f"BUILDER_PATCH_R{round_num}", agent="Builder", round=round_num)
         patch_text = await builder.propose_patch(task_description, notes, evidence, prior_findings)
         emit("agent_message", agent="Builder", round=round_num, message_type="PATCH", content=patch_text)
+        emit("token_metric", agent="Builder", round=round_num, **builder.last_usage)
 
         emit("stage_change", stage=f"GATEKEEPER_AUDIT_R{round_num}", agent="Gatekeeper", round=round_num)
         findings = await gatekeeper.review(patch_text, evidence)
@@ -90,6 +92,7 @@ async def run_collaboration_cycle(
             message_type="AUDIT_FINDINGS",
             findings=findings,
         )
+        emit("token_metric", agent="Gatekeeper", round=round_num, **gatekeeper.last_usage)
         rounds.append({"round": round_num, "patch_text": patch_text, "findings": findings})
 
         if not has_blocking_findings(findings):

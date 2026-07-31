@@ -169,3 +169,49 @@ async def test_run_id_is_generated_and_used_in_log_filename_when_not_provided(tm
     assert result["run_id"] in log_files[0].name
     logged = json.loads(log_files[0].read_text(encoding="utf-8"))
     assert logged["run_id"] == result["run_id"]
+
+
+async def test_token_metric_events_are_emitted_with_usage_fields(tmp_path, monkeypatch):
+    async def fake_analyze(self, task, evidence):
+        self.last_usage = {"input_tokens": 10, "output_tokens": 5, "elapsed_ms": 100}
+        return "notes"
+
+    async def fake_propose(self, task, notes, evidence, prior_findings=None):
+        self.last_usage = {"input_tokens": 20, "output_tokens": 8, "elapsed_ms": 200}
+        return "patch"
+
+    async def fake_review(self, patch_text, evidence):
+        self.last_usage = {"input_tokens": 30, "output_tokens": 12, "elapsed_ms": 300}
+        return []
+
+    monkeypatch.setattr(remediation_loop.AmigoResearcher, "analyze", fake_analyze)
+    monkeypatch.setattr(remediation_loop.AmigoBuilder, "propose_patch", fake_propose)
+    monkeypatch.setattr(remediation_loop.AmigoGatekeeper, "review", fake_review)
+
+    events = []
+    await run_collaboration_cycle(
+        tmp_path,
+        "fix the bug",
+        log_dir=tmp_path / "logs",
+        on_event=events.append,
+    )
+
+    token_metric_events = [e for e in events if e["type"] == "token_metric"]
+
+    researcher_events = [e for e in token_metric_events if e["agent"] == "Researcher"]
+    assert len(researcher_events) == 1
+    assert researcher_events[0]["input_tokens"] == 10
+    assert researcher_events[0]["output_tokens"] == 5
+    assert researcher_events[0]["elapsed_ms"] == 100
+
+    builder_events = [e for e in token_metric_events if e["agent"] == "Builder"]
+    assert len(builder_events) == 1
+    assert builder_events[0]["input_tokens"] == 20
+    assert builder_events[0]["output_tokens"] == 8
+    assert builder_events[0]["elapsed_ms"] == 200
+
+    gatekeeper_events = [e for e in token_metric_events if e["agent"] == "Gatekeeper"]
+    assert len(gatekeeper_events) == 1
+    assert gatekeeper_events[0]["input_tokens"] == 30
+    assert gatekeeper_events[0]["output_tokens"] == 12
+    assert gatekeeper_events[0]["elapsed_ms"] == 300
