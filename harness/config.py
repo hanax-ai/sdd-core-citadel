@@ -22,7 +22,7 @@ def load_env_file():
 load_env_file()
 
 # Default target directory to audit / build against
-DEFAULT_TARGET_DIR = Path("/mnt/c/Users/JarvisRichardson/Desktop/WiP/SDD-Core-Framework-Analysis")
+DEFAULT_TARGET_DIR = Path(r"C:\Users\JarvisRichardson\Desktop\WiP\SDD-Core-Framework-Analysis")
 
 # Sub-directories
 HARNESS_DIR = AMIGO_ROOT / "harness"
