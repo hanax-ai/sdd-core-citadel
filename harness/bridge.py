@@ -57,8 +57,13 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 import uvicorn
 
-from harness.config import DEFAULT_TARGET_DIR
-from harness.llm_clients import DEFAULT_ANTHROPIC_MODEL, DEFAULT_GEMINI_MODEL, DEFAULT_OPENAI_MODEL
+from harness.config import DEFAULT_TARGET_DIR, GATEKEEPER_KEY_ENV, resolve_gatekeeper_provider
+from harness.llm_clients import (
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_MOONSHOT_MODEL,
+    DEFAULT_OPENAI_MODEL,
+)
 from harness.remediation_loop import run_collaboration_cycle
 
 APP_VERSION = "1.1.0"
@@ -72,10 +77,17 @@ PORT = int(os.environ.get("CITADEL_PORT", "8000"))
 # still be imported (e.g. by tests) before the env var is set.
 BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY", "")
 
+# Snapshot of the model IDs at process start (pre-existing behavior, kept).
+# Note the deliberate asymmetry with GATEKEEPER_PROVIDER, which the endpoints
+# below resolve live per request: which provider is active decides whether a run
+# can start at all, so it must never be reported from a stale snapshot, whereas
+# these are display strings for a process that would have to be restarted to
+# pick up a new model anyway.
 MODELS = {
     "anthropic": os.environ.get("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL),
     "openai": os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
     "gemini": os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+    "moonshot": os.environ.get("MOONSHOT_MODEL", DEFAULT_MOONSHOT_MODEL),
 }
 
 # The dashboard's dev server (dashboard/vite.config.ts has no explicit port
@@ -616,12 +628,21 @@ async def system_health() -> dict[str, Any]:
         db_ok = False
         problems.append(f"sqlite unavailable at {DB_PATH}: {exc}")
 
-    keys = {
-        "anthropic": bool(os.environ.get("ANTHROPIC_API_KEY")),
-        "openai": bool(os.environ.get("OPENAI_API_KEY")),
-        "gemini": bool(os.environ.get("GEMINI_API_KEY")),
-    }
-    missing = [name for name, present in keys.items() if not present]
+    # Only the Gatekeeper's ACTIVE provider is checked. Checking all of them
+    # reported a missing GEMINI_API_KEY on a working Kimi config (false alarm)
+    # while never checking MOONSHOT_API_KEY at all (false all-clear, which is
+    # the dangerous half: the run died mid-Gatekeeper after a green light).
+    # Env var names, not provider nicknames, so the problem text says exactly
+    # what to set.
+    required = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+    try:
+        required.append(GATEKEEPER_KEY_ENV[resolve_gatekeeper_provider()])
+    except RuntimeError as exc:
+        # No provider will serve the Gatekeeper, so there is no gatekeeper key
+        # to check -- report the misconfiguration itself instead.
+        problems.append(str(exc))
+
+    missing = [name for name in required if not os.environ.get(name)]
     if missing:
         problems.append("missing provider keys: " + ", ".join(sorted(missing)))
 
@@ -639,6 +660,17 @@ async def system_health() -> dict[str, Any]:
 
 @app.get("/api/system/status", dependencies=[Depends(require_bridge_key)])
 async def system_status() -> dict[str, Any]:
+    """Raw provider facts plus the one derived fact the UI cannot compute for
+    itself: which provider is actually serving the Gatekeeper. The key/model
+    fields stay raw ("this env var is non-empty") and are all reported
+    unconditionally -- `gatekeeper_provider` is what tells the UI which pair to
+    believe, so no field has to change meaning when the provider switches."""
+    try:
+        provider: str | None = resolve_gatekeeper_provider()
+    except RuntimeError:
+        # null == "no provider will serve the Gatekeeper"; /api/system/health
+        # carries the detailed diagnosis.
+        provider = None
     return {
         "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "openai_key_present": bool(os.environ.get("OPENAI_API_KEY")),
@@ -646,6 +678,9 @@ async def system_status() -> dict[str, Any]:
         "anthropic_model": MODELS["anthropic"],
         "openai_model": MODELS["openai"],
         "gemini_model": MODELS["gemini"],
+        "moonshot_key_present": bool(os.environ.get("MOONSHOT_API_KEY")),
+        "moonshot_model": MODELS["moonshot"],
+        "gatekeeper_provider": provider,
     }
 
 

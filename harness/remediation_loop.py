@@ -97,9 +97,22 @@ async def run_collaboration_cycle(
             round=round_num,
             message_type="AUDIT_FINDINGS",
             findings=findings,
+            provider=gatekeeper.last_provider,
+            model=gatekeeper.last_model,
         )
         emit("token_metric", agent="Gatekeeper", round=round_num, **gatekeeper.last_usage)
-        rounds.append({"round": round_num, "patch_text": patch_text, "findings": findings})
+        rounds.append(
+            {
+                "round": round_num,
+                "patch_text": patch_text,
+                "findings": findings,
+                # Stamped into the transcript so a replay attributes these
+                # findings to the provider that produced them rather than to
+                # whichever one happens to be configured at replay time.
+                "gatekeeper_provider": gatekeeper.last_provider,
+                "gatekeeper_model": gatekeeper.last_model,
+            }
+        )
 
         if not has_blocking_findings(findings):
             verdict = "PASS"

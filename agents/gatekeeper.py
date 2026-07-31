@@ -29,6 +29,8 @@ class AmigoGatekeeper:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.last_usage: dict = {}
+        self.last_provider: str | None = None
+        self.last_model: str | None = None
 
     def format_review_prompt(self, patch_summary: str, diff_text: str) -> str:
         """Format review prompt for external model inspection."""
@@ -53,6 +55,12 @@ class AmigoGatekeeper:
             "output_tokens": result["output_tokens"],
             "elapsed_ms": result["elapsed_ms"],
         }
+        # Read leniently: a caller that cannot say which provider served the
+        # review leaves these None, which downstream reads as "unknown". Naming
+        # the configured provider instead would be a guess, and guessing the
+        # attribution is the defect this records.
+        self.last_provider = result.get("provider")
+        self.last_model = result.get("model")
         return result["findings"]
 
 
