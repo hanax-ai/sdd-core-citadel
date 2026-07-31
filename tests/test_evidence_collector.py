@@ -15,11 +15,53 @@ def _fake_git_status(target_dir):
 _DENSE_UNIT = "Zx9#kq7! "
 _PROSE_UNIT = "The quick brown fox jumps over the lazy dog. "
 
+_WORD_OR_CHAR_RE = re.compile(r"[A-Za-z]+|[\s\S]")
+
+
+class _FakeEncoding:
+    """Deterministic stand-in for the real tiktoken encoder.
+
+    The token-budget tests below need dense/sparse fixtures that reliably
+    cross (or stay under) a token budget. Asserting that against the real
+    `cl100k_base` encoder makes the tests depend on tiktoken's BPE data
+    having downloaded successfully in this environment -- which fails
+    offline, on a cold CI cache, etc. (see CodeRabbit finding on commit
+    659db2b). This fake reproduces just the qualitative property the
+    fixtures rely on -- common all-letter runs of 3+ chars ("words") count
+    as a single token, like a real trained BPE vocab would collapse them;
+    everything else (digits, symbols, whitespace, 1-2 letter runs) costs one
+    token per character, like rare fragments that don't merge -- with fixed,
+    hand-verified token counts, independent of any real encoder.
+    """
+
+    def encode(self, text: str) -> list[str]:
+        tokens: list[str] = []
+        for run in _WORD_OR_CHAR_RE.findall(text):
+            if run.isalpha() and len(run) >= 3:
+                tokens.append(run)
+            else:
+                tokens.extend(run)
+        return tokens
+
+    def decode(self, tokens: list[str]) -> str:
+        return "".join(tokens)
+
+
+def _use_fake_encoding(monkeypatch):
+    """Force a deterministic encoder so token-boundary assertions hold
+    regardless of whether the real tiktoken encoder loaded in this
+    environment."""
+    monkeypatch.setattr(ec, "_ENCODING", _FakeEncoding())
+
 
 def test_git_diff_truncation_flag_true_when_diff_exceeds_limit(tmp_path, monkeypatch):
-    # 1170 chars (well under the old 2000-char limit) but ~1041 tokens,
-    # which exceeds the new token budget -- proves truncation is token-based.
+    # 1170 chars (well under the old 2000-char limit); under the real
+    # cl100k_base encoder this is ~1041 tokens (exceeds budget), and under
+    # the deterministic fake encoder it's exactly 1170 tokens (also exceeds
+    # budget) -- either way proves truncation is token-based, and does so
+    # deterministically here via the fake.
     dense_diff = _DENSE_UNIT * 130
+    _use_fake_encoding(monkeypatch)
     monkeypatch.setattr(ec, "get_git_status", _fake_git_status)
     monkeypatch.setattr(ec, "get_git_diff", lambda target_dir: dense_diff)
     evidence = ec.collect_task_evidence(tmp_path)
@@ -28,10 +70,13 @@ def test_git_diff_truncation_flag_true_when_diff_exceeds_limit(tmp_path, monkeyp
 
 
 def test_git_diff_not_truncated_when_chars_high_but_tokens_low(tmp_path, monkeypatch):
-    # 2250 chars (over the old 2000-char limit) but only ~501 tokens, under
-    # the new token budget -- proves this isn't just char truncation in
-    # disguise; a real char-based cutoff would have truncated this.
+    # 2250 chars (over the old 2000-char limit); under the real cl100k_base
+    # encoder this is ~501 tokens, and under the deterministic fake encoder
+    # it's exactly 950 tokens -- both under the new token budget, proving
+    # this isn't just char truncation in disguise (a real char-based cutoff
+    # would have truncated this), deterministically here via the fake.
     sparse_diff = _PROSE_UNIT * 50
+    _use_fake_encoding(monkeypatch)
     monkeypatch.setattr(ec, "get_git_status", _fake_git_status)
     monkeypatch.setattr(ec, "get_git_diff", lambda target_dir: sparse_diff)
     evidence = ec.collect_task_evidence(tmp_path)
@@ -78,10 +123,13 @@ def test_focus_file_evidence_includes_real_content(tmp_path):
     assert entry["content_truncated"] is False
 
 
-def test_focus_file_content_truncated_when_tokens_exceed_budget(tmp_path):
-    # 2250 chars (well under the old 4000-char limit) but ~2001 tokens,
-    # which exceeds the new token budget -- proves truncation is token-based,
-    # not the old flat 4000-char cutoff.
+def test_focus_file_content_truncated_when_tokens_exceed_budget(tmp_path, monkeypatch):
+    # 2250 chars (well under the old 4000-char limit); under the real
+    # cl100k_base encoder this is ~2001 tokens, and under the deterministic
+    # fake encoder it's exactly 2250 tokens -- both exceed the new token
+    # budget, proving truncation is token-based (not the old flat 4000-char
+    # cutoff), deterministically here via the fake.
+    _use_fake_encoding(monkeypatch)
     dense_content = _DENSE_UNIT * 250
     target = tmp_path / "big.py"
     target.write_text(dense_content, encoding="utf-8")
@@ -91,10 +139,13 @@ def test_focus_file_content_truncated_when_tokens_exceed_budget(tmp_path):
     assert len(entry["content"]) < len(dense_content)
 
 
-def test_focus_file_content_not_truncated_when_chars_high_but_tokens_low(tmp_path):
-    # 4050 chars (over the old 4000-char limit) but only ~901 tokens, under
-    # the new token budget -- a real char-based cutoff would have truncated
-    # this at 4000 chars; token-aware truncation must not.
+def test_focus_file_content_not_truncated_when_chars_high_but_tokens_low(tmp_path, monkeypatch):
+    # 4050 chars (over the old 4000-char limit); under the real cl100k_base
+    # encoder this is ~901 tokens, and under the deterministic fake encoder
+    # it's exactly 1710 tokens -- both under the new token budget. A real
+    # char-based cutoff would have truncated this at 4000 chars;
+    # token-aware truncation must not, deterministically here via the fake.
+    _use_fake_encoding(monkeypatch)
     sparse_content = _PROSE_UNIT * 90
     target = tmp_path / "prose.py"
     target.write_text(sparse_content, encoding="utf-8")
