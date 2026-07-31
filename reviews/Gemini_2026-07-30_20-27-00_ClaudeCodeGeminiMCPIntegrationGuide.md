@@ -254,6 +254,138 @@ codex mcp add <server-name> --url <mcp-server-url>
 
 ---
 
+## 🚀 Part 5: Global Setup Script & Unified Cross-Provider Workflow
+
+This comprehensive update delivers a single global setup script followed by a unified multi-agent workflow that pits OpenAI Codex and Google Gemini against each other inside your Claude Code terminal.
+
+### 📜 5.1 Global Configuration Update Script
+
+This automated Bash script instantly updates your global Claude setup file (`~/.claude/settings.json`) to enforce the 300-line triage rule across all future development directories. Run it directly in your terminal:
+
+```bash
+#!/bin/bash
+# Global Claude Setup Script for Gemini Triage Rule
+
+TARGET_FILE="$HOME/.claude/settings.json"
+
+# Check if global Claude directory exists, create if missing
+mkdir -p "$(dirname "$TARGET_FILE")"
+
+# Create file with an initial empty JSON structure if it doesn't exist
+if [ ! -f "$TARGET_FILE" ]; then
+    echo "{}" > "$TARGET_FILE"
+fi
+
+# Use standard node script to robustly patch the JSON object without breaking text layout
+node -e "
+const fs = require('fs');
+const file = '$TARGET_FILE';
+let config = {};
+
+try {
+    config = JSON.parse(fs.readFileSync(file, 'utf8'));
+} catch (e) {
+    config = {};
+}
+
+// Ensure global custom rules string space exists
+if (!config.customInstructions) {
+    config.customInstructions = '';
+}
+
+const triageRule = \`
+[GLOBAL SYSTEM DIRECTIVE: TOKEN BUDGET & MODEL TRIAGE]
+1. Before digesting any file content, execute line metrics checks.
+2. If any source file is 300 lines or longer, you are FORBIDDEN from reading it natively.
+3. Instead, route the task immediately to the Gemini MCP server:
+   mcp__gemini-collab__ask_gemini prompt: \"Ingest file [FILE_PATH] and provide structural analysis for: [USER_REQUEST]\"
+4. Use Gemini's high-context summary data to formulate native local edits.
+\`;
+
+if (!config.customInstructions.includes('TOKEN BUDGET & MODEL TRIAGE')) {
+    config.customInstructions = (config.customInstructions + '\n' + triageRule).trim();
+    fs.writeFileSync(file, JSON.stringify(config, null, 2), 'utf8');
+    console.log('✅ Global 300-line triage rule injected into ~/.claude/settings.json successfully.');
+} else {
+    console.log('ℹ️ Triage rule already exists in your global Claude configuration.');
+}
+"
+```
+
+### ⚔️ 5.2 Combining Codex and Gemini (The Ultimate Workflow)
+
+By combining Gemini’s 1-million+ token context window with Codex’s adversarial testing algorithms, you create a perfect validation loop:
+- **Gemini** acts as the **"Architect"** (reading the macro codebase cheaply via its 1M+ token window).
+- **Codex** acts as the **"QA Red Team"** (trying to find holes, security flaws, and scaling constraints in the plan).
+- **Claude Code** acts as the **"Synthesizer & Local File Executor"**.
+
+```mermaid
+flowchart TD
+    UserPrompt["Developer Task Prompt"] --> GeminiIngest["1. Gemini Ingestion Phase<br/>(mcp__gemini-collab__ask_gemini)"]
+    GeminiIngest -->|"Macro Context & Refactor Map"| ClaudeSynth["2. Claude Synthesis Phase<br/>(Step-by-Step Engineering Roadmap)"]
+    ClaudeSynth -->|"Draft Engineering Plan"| CodexAudit["3. Codex Adversarial Audit<br/>(/codex adversarial-review -- background)"]
+    CodexAudit -->|"Red Team Findings & Vulnerabilities"| AuditPass{"Audit Passed or Bugs Caught?"}
+    AuditPass -->|"Bugs/Flaws Identified"| PatchPlan["4. Resolution & Execution Phase<br/>(Patch Security Holes & Race Conditions)"]
+    PatchPlan --> FileWrites["Local Workspace File Writes"]
+
+    classDef passStyle fill:#064e3b,stroke:#10b981,color:#fff,font-weight:bold;
+    FileWrites:::passStyle
+```
+
+#### Master Prompt Template
+
+When initiating a major refactor or building a complex feature, paste this exact framework into your Claude Code terminal:
+
+```markdown
+We are executing a cross-agent architectural pipeline. Follow these sequential steps precisely:
+
+1. [PHASE 1: GEMINI INGESTION]
+   - Notice that the target files are over 300 lines. 
+   - Invoke `mcp__gemini-collab__ask_gemini` to read the entire context space and output a comprehensive implementation plan for [INSERT YOUR FEATURE HERE].
+
+2. [PHASE 2: CLAUDE SYNTHESIS]
+   - Take Gemini's output plan and format it into a localized, step-by-step engineering roadmap. Do not modify files yet.
+
+3. [PHASE 3: CODEX ADVERSARIAL AUDIT]
+   - Pass Claude's generated engineering roadmap directly to the Codex subsystem using the native slash command:
+   - Run: `/codex adversarial-review -- background` to analyze the roadmap.
+   - Instruct Codex to find edge cases, logic flaws, architectural regression vulnerabilities, and scale constraints in the Gemini-Claude plan.
+
+4. [PHASE 4: RESOLUTION & EXECUTION]
+   - Wait for `/codex results`. 
+   - Analyze the errors caught by Codex.
+   - Modify the plan to patch those specific security holes, then execute local workspace file updates natively.
+```
+
+#### Real-Time Terminal Execution Simulation
+
+When you run the master prompt, your terminal workflow executes like this:
+
+```bash
+> User: Rebuild the entire websocket notification backend using the cross-agent pipeline.
+
+Claude Code: Target file ./server/ws.ts is 620 lines. Invoking Gemini MCP...
+Claude Code: Running mcp__gemini-collab__ask_gemini...
+Claude Code: [Gemini Architecture blueprint received.]
+
+Claude Code: Generating localized deployment roadmap... Done.
+Claude Code: Initiating secondary verification via OpenAI Codex plugin...
+Claude Code: Executing /codex adversarial-review -- background...
+Claude Code: Job running in background. You can continue prompting.
+
+> User: /codex status
+Claude Code: Background audit is 100% complete.
+
+> User: /codex results
+Claude Code: [Codex Report Attached] 
+⚠️ Critical: Gemini plan uses unauthenticated ping/pong loops. 
+⚠️ Warning: High-concurrency race condition discovered on lines 40-55.
+
+Claude Code: I will now patch the unauthenticated loop and fix the race condition before writing code to your local repository files. Modifying files now...
+```
+
+---
+
 ## 📚 References & Resources
 
 - [Google Gemini API Coding Agents Documentation](https://ai.google.dev/gemini-api/docs/coding-agents)
