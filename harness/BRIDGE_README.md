@@ -6,8 +6,41 @@ Copy `bridge/bridge.py` into `Amigos-Agents/harness/bridge.py`.
 pip install fastapi uvicorn sse-starlette pydantic python-dotenv
 export ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=...
 export AMIGO_TARGET_DIR=/path/to/target/repo
+export BRIDGE_API_KEY=some-long-random-string
 python harness/bridge.py          # http://127.0.0.1:8000
 ```
+
+## Auth
+
+Every route requires a shared secret sent as the `X-Bridge-Key` request
+header, checked against the `BRIDGE_API_KEY` env var with a constant-time
+comparison (`hmac.compare_digest`). This is a bridge-level addition, not
+part of the harness's own contract -- it exists because the bridge listens
+on a local TCP port with no other access control.
+
+- `BRIDGE_API_KEY` (required) -- the shared secret. The server refuses to
+  start (fails fast, same pattern as the provider key checks in
+  `harness/llm_clients.py`) if this is unset.
+- Every request must send `X-Bridge-Key: <the same value>`, or the bridge
+  responds `401 Unauthorized`.
+- Note: browsers' native `EventSource` API cannot set custom request
+  headers. If the dashboard wires up `GET /api/stream/{run_id}` with a
+  plain `new EventSource(url)`, it will not be able to send `X-Bridge-Key`
+  and will get a 401. Use a fetch-based SSE reader (one that can set
+  headers) for that endpoint, or extend the auth check to also accept the
+  key as a query parameter -- not implemented here, since this bridge picks
+  header-only auth for simplicity.
+
+## target_dir allowlist
+
+`target_dir` on `POST /api/run-task` is resolved and checked against an
+allowlist before use -- it is never trusted as-is.
+
+- `BRIDGE_ALLOWED_TARGET_DIRS` (optional) -- comma-separated absolute paths.
+  A requested `target_dir` must resolve to one of these roots or a
+  subdirectory of one of them, or the request is rejected with `400
+  TARGET_NOT_ALLOWED`.
+- If unset, the allowlist defaults to just `harness.config.DEFAULT_TARGET_DIR`.
 
 ## Vite proxy (mounting CITADEL in `Amigos-Agents/dashboard/`)
 
