@@ -18,6 +18,10 @@ By linking these AI ecosystems via MCP, Claude Code can leverage Gemini's 1M+ to
 
 ## 🌐 Part 1: Linking Claude Code to Google Gemini
 
+The Gemini MCP integrations—such as the **Claude Code + Gemini MCP Server** (`RaiAnsar/claude_code-gemini-mcp`) and **RLabs Gemini MCP** (`rlabs-inc/gemini-mcp`)—operate differently from the strict slash-commands of the OpenAI Codex plugin. 
+
+Instead of relying solely on hardcoded slash commands, Gemini integrations expose capabilities to Claude as background execution scripts and natural-language "skills."
+
 ### 🔗 One-Line Installation
 
 To instantly bridge Claude Code with Gemini, execute the following command in your terminal:
@@ -46,23 +50,31 @@ flowchart LR
 | **`npx -y`** | Node.js package runner that downloads and executes the package dynamically without cluttering global disk space (`-y` auto-approves installation prompts). |
 | **`gemini-mcp-tool`** | The open-source bridge package that exposes Gemini API capabilities to Claude Code over MCP stdio. |
 
-### 🔄 Gemini Runtime Workflow
+### 🛠️ Under-the-Hood Gemini Collaboration Scripts
 
-Once registered, Claude Code gains an intelligent background bridge to Google Gemini:
+When prompting Claude Code natively, it automatically invokes specialized background scripts to delegate heavy logic to Gemini:
 
-```mermaid
-flowchart TD
-    User["Developer Terminal (Claude Code)"] -->|"Task: Analyze 1M Token Log / Image File"| Claude["Claude Code Engine"]
-    Claude -->|"Invoke MCP Tool: gemini-cli"| MCPBridge["gemini-mcp-tool Bridge (npx)"]
-    MCPBridge <-->|"Gemini API / CLI Execution"| Gemini["Google Gemini (1M+ Context & Multimodal)"]
-    Gemini -->|"Processed Result & Embeddings"| MCPBridge
-    MCPBridge -->|"Structured MCP Response"| Claude
-    Claude -->|"Final Synthesized Output"| User
+1. **`ask_gemini` Script:** Offloads high-context questions directly to Gemini. Because Claude API costs scale on massive repositories, Claude automatically executes this script to read deep into a 1-million-token codebase using Gemini’s massive context window—saving significant token costs.
+2. **`gemini_code_review` Script:** Feeds script blocks directly into Gemini's API to evaluate security vulnerabilities, SQL injection entry points, and performance constraints from an alternative model perspective.
+3. **`gemini_brainstorm` Script:** Invokes Gemini to outline multiple architectural solutions for a problem before Claude begins executing local file writes.
+
+### 🎯 Natural Language & Tool Triggers in Claude Code
+
+You do not need to drop out of your terminal workflow to use them. You can type natural language or target specific tool prefixes inside your Claude session:
+
+```bash
+# Example: Targeting specific Gemini script via Claude's MCP environment
+mcp__gemini-collab__ask_gemini prompt: "Scan the entire backend folder and check for SQL injection entry points."
+
+# Example: Running a targeted security review script
+mcp__gemini-collab__gemini_code_review code: "def verify(user): return user.token == env.SECRET" focus: "security"
 ```
 
-1. **Massive Context Offloading:** When analyzing massive codebases or 100k+ line log files exceeding standard bounds, Claude Code delegates heavy retrieval context to Gemini's 1M+ token window.
-2. **Multimodal Analysis:** Image diagrams, architecture mockups, and UI screenshots can be processed by Gemini and returned to Claude Code in real time.
-3. **Seamless Terminal Workflow:** The bridge operates silently in the background, allowing you to remain inside your primary Claude Code console while using Gemini's compute capabilities.
+*(Note: With RLabs Gemini MCP, Claude can execute multimodal scripts, e.g.: `"Use Gemini to analyze the layout of this local UI mockup image."`)*
+
+### 🤖 Automated Dynamic Workflows (Advanced Setup)
+
+When you issue a complex prompt (e.g., *"Rebuild this game engine"*), Claude Code automatically generates an internal script file containing functions for different build and review phases. It then spins up multiple sub-agents in parallel to execute those steps, using the Gemini MCP server to perform deep-context checking while Claude writes final target files.
 
 ---
 
@@ -159,6 +171,9 @@ codex mcp add <server-name> --url <mcp-server-url>
 
 ## 📚 References & Resources
 
+- [Claude Code Gemini MCP Server Repository](https://github.com/RaiAnsar/claude_code-gemini-mcp)
+- [RLabs Gemini MCP Repository](https://github.com/rlabs-inc/gemini-mcp)
+- [Gemini MCP Integration Skills](https://mcpmarket.com/tools/skills/gemini-integration-for-claude)
 - [Official OpenAI Codex Plugin Repository (`openai/codex-plugin-cc`)](https://github.com/openai/codex-plugin-cc)
 - [OpenAI Codex Plugin Announcement](https://community.openai.com/t/introducing-codex-plugin-for-claude-code/1378186)
 - [Syncing Codex & Claude Configs](https://community.openai.com/t/sync-codex-and-claude-code-configs-skills-agents-mcp-permissions/1380517)
