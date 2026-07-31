@@ -12,9 +12,11 @@ import { DEMO_TRANSCRIPT } from "@/lib/citadel/fixtures";
 import { useUIStore } from "@/stores/useUIStore";
 
 export type RunStatus = "idle" | "dispatching" | "running" | "complete" | "error" | "cancelled";
-export type ConnectionState = "closed" | "connecting" | "open" | "reconnecting";
+export type ConnectionState = "closed" | "connecting" | "open" | "reconnecting" | "lost";
 
-const RECONNECT_SECONDS = 3;
+const RECONNECT_BASE_SECONDS = 3;
+const RECONNECT_MAX_SECONDS = 30;
+const RECONNECT_MAX_ATTEMPTS = 8;
 
 export function useAgentStream() {
   const mode = useUIStore((s) => s.mode);
@@ -33,6 +35,7 @@ export function useAgentStream() {
   const source = useRef<EventSource | null>(null);
   const lastEventId = useRef<string | null>(null);
   const cancelled = useRef(false);
+  const reconnectAttempts = useRef(0);
 
   const teardown = useCallback(() => {
     timers.current.forEach(clearTimeout);
@@ -103,13 +106,30 @@ export function useAgentStream() {
 
       ["stage_change", "agent_message", "token_metric", "run_complete", "error"].forEach(bind);
 
-      es.onopen = () => setConnection("open");
+      es.onopen = () => {
+        setConnection("open");
+        reconnectAttempts.current = 0;
+      };
       es.onerror = () => {
         es.close();
         source.current = null;
         if (cancelled.current) return;
+
+        reconnectAttempts.current += 1;
+        if (reconnectAttempts.current > RECONNECT_MAX_ATTEMPTS) {
+          setConnection("lost");
+          setRetryIn(0);
+          setErrorText(
+            "Connection lost after repeated retries. Reconnect manually or start a new run.",
+          );
+          return;
+        }
+
         setConnection("reconnecting");
-        let left = RECONNECT_SECONDS;
+        let left = Math.min(
+          RECONNECT_BASE_SECONDS * 2 ** (reconnectAttempts.current - 1),
+          RECONNECT_MAX_SECONDS,
+        );
         setRetryIn(left);
         const iv = setInterval(() => {
           left -= 1;
@@ -125,11 +145,20 @@ export function useAgentStream() {
     [bridgeUrl, push],
   );
 
+  const reconnect = useCallback(() => {
+    if (!runId) return;
+    cancelled.current = false;
+    reconnectAttempts.current = 0;
+    setConnection("connecting");
+    connect(runId);
+  }, [connect, runId]);
+
   const start = useCallback(
     async (req: RunTaskRequest) => {
       teardown();
       cancelled.current = false;
       lastEventId.current = null;
+      reconnectAttempts.current = 0;
       setEvents([]);
       setErrorText(null);
       setElapsed(0);
@@ -188,6 +217,7 @@ export function useAgentStream() {
     start,
     cancel,
     clear,
+    reconnect,
     isRunning: status === "running" || status === "dispatching",
   };
 }
@@ -202,7 +232,7 @@ export function deriveRunState(events: CitadelEvent[]) {
 
   for (const e of events) {
     if (e.type === "stage_change") stage = e.stage;
-    if (e.type === "token_metric") tokens += e.tokens_used;
+    if (e.type === "token_metric") tokens += e.input_tokens + e.output_tokens;
     if (e.type === "agent_message") {
       rounds = Math.max(rounds, e.round ?? 0);
       if (e.findings?.length) findings = e.findings;

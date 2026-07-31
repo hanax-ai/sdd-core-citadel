@@ -29,7 +29,7 @@ export function StreamConsole({
   const openFindings = run.events.reduce(
     (n, e) =>
       e.type === "agent_message"
-        ? n + (e.findings?.filter((f) => f.severity !== "resolved").length ?? 0)
+        ? n + (e.findings?.filter((f) => f.severity !== "NOTE").length ?? 0)
         : n,
     0,
   );
@@ -111,6 +111,21 @@ export function StreamConsole({
           <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-5 py-2 text-xs text-warning">
             <WifiOff className="size-3.5" />
             Stream disconnected. Reconnecting in {run.retryIn}s… (resuming from last event ID)
+          </div>
+        )}
+
+        {run.connection === "lost" && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">
+            <WifiOff className="size-3.5" />
+            Connection lost after repeated retries. Auto-reconnect stopped.
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto h-6 px-2 text-[11px]"
+              onClick={run.reconnect}
+            >
+              <RotateCw className="size-3" /> Reconnect
+            </Button>
           </div>
         )}
 
@@ -304,9 +319,11 @@ function EventCard({ event }: { event: CitadelEvent }) {
         </span>
       </div>
       {/* No motion on the message body — spec §5.1 forbids animating code text. */}
-      <pre className="mt-3 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground/85">
-        {event.content}
-      </pre>
+      {event.content ? (
+        <pre className="mt-3 whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-foreground/85">
+          {event.content}
+        </pre>
+      ) : null}
       {event.findings?.length ? (
         <ul className="mt-3 space-y-1.5">
           {event.findings.map((f, i) => (
@@ -314,11 +331,11 @@ function EventCard({ event }: { event: CitadelEvent }) {
               <span
                 className={cn(
                   "mt-0.5 rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase",
-                  f.severity === "resolved"
-                    ? "border-codex/40 text-codex"
-                    : f.severity === "note"
-                      ? "border-border text-muted-foreground"
-                      : "border-destructive/40 text-destructive",
+                  f.severity === "CRITICAL"
+                    ? "border-destructive/40 text-destructive"
+                    : f.severity === "WARNING"
+                      ? "border-warning/40 text-warning"
+                      : "border-border text-muted-foreground",
                 )}
               >
                 L{f.line} {f.severity}
