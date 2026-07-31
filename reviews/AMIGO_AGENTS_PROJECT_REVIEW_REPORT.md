@@ -18,7 +18,7 @@ This audit evaluated the harness repository across architecture alignment, tool 
 
 ## 2. Multi-Agent Roster & Role Mapping
 
-The project documentation ([AMIGO_AGENTS_HARNESS_BLUEPRINT.md](../AMIGO_AGENTS_HARNESS_BLUEPRINT.md) and [THREE_AMIGO_AGENTS_PROFILES_AND_CAPABILITIES.md](../research/THREE_AMIGO_AGENTS_PROFILES_AND_CAPABILITIES.md)) establishes a clear role division:
+The project documentation ([AMIGO_AGENTS_HARNESS_BLUEPRINT.md](../docs/AMIGO_AGENTS_HARNESS_BLUEPRINT.md) and [THREE_AMIGO_AGENTS_PROFILES_AND_CAPABILITIES.md](../research/THREE_AMIGO_AGENTS_PROFILES_AND_CAPABILITIES.md)) establishes a clear role division:
 
 | Agent | Target Model | Core Responsibilities | Current Implementation Status |
 | :--- | :--- | :--- | :--- |
@@ -30,7 +30,7 @@ The project documentation ([AMIGO_AGENTS_HARNESS_BLUEPRINT.md](../AMIGO_AGENTS_H
 
 ## 3. Implementation Audit & Roadmap Gap Analysis
 
-Comparing the codebase against the 6-phase roadmap in [implementation_plan.md](../implementation_plan.md):
+Comparing the codebase against the 6-phase roadmap in [implementation_plan.md](../docs/implementation_plan.md):
 
 ```mermaid
 flowchart LR
