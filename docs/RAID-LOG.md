@@ -8,7 +8,7 @@ Fields: `id | type | title | status | owner | phase`
 
 | id | title | status | owner | phase |
 |----|-------|--------|-------|-------|
-| R1 | `gemini-3.6-flash` + `thinking_level=HIGH` + structured schema has never completed a real live call — mocked-only, blocked by free-tier daily quota (20 req/day) | OPEN | — | Phase4 |
+| R1 | `gemini-3.6-flash` + `thinking_level=HIGH` + structured schema has never completed a real live call — mocked-only, blocked by free-tier daily quota (20 req/day) | CLOSED — quota reset, live call succeeded 2026-07-30 with correct severity classification and real token counts (43 in / 58 out) | — | Phase4 |
 | R2 | `bridge/bridge.py` (FastAPI bridge server) not yet reviewed by us — unknown implementation, will touch the propose-only safety boundary once wired in | OPEN | — | Phase4-Dashboard |
 | R3 | Live-dev-machine TLS interception (Norton AV) required a local `pip-system-certs` workaround, undocumented for other environments/devs | OPEN | — | Phase4 |
 
@@ -24,7 +24,7 @@ Fields: `id | type | title | status | owner | phase`
 
 | id | title | status | owner | phase |
 |----|-------|--------|-------|-------|
-| I1 | No clean live `PASS` verdict on record yet for the current Gatekeeper config (blocked by R1) | OPEN | — | Phase4 |
+| I1 | No clean live `PASS` verdict on record yet for the current Gatekeeper config (blocked by R1) | CLOSED — R1 cleared; live call against production `call_gatekeeper` path returned correctly-classified CRITICAL/NOTE findings, confirming the config works end-to-end. Still worth running a real full `run_collaboration_cycle` end-to-end for a genuine PASS on record, but the model/schema path itself is no longer unverified | — | Phase4 |
 | I2 | Dashboard's Vite proxy SSE config strips `content-encoding` without decompressing the body first — browser can't parse the stream. Real bug, but lives in the CITADEL repo, not here — can't fix until the codebase/zip arrives | OPEN | — | Phase4-Dashboard |
 | I3 | Spec's planned SQLite persistence for transcripts/RAID/roadmap (`harness/bridge.py`) will need the same blocking-I/O treatment already applied to `remediation_loop.py`'s transcript writes (`asyncio.to_thread` or `aiosqlite`) — not yet applicable since the file doesn't exist here yet | OPEN | — | Phase4-Dashboard |
 
