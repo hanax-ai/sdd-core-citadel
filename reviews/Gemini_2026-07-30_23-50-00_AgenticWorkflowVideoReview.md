@@ -4,7 +4,7 @@
 **Time:** 23:50:00 -05:00
 **Review Type:** External Resource Analysis & Architectural Alignment
 **Video URL:** `https://youtu.be/8JWhwhxWtJw`
-**Target Directory:** `C:\Users\JarvisRichardson\Desktop\SDD\Amigos-Agents\reviews\`
+**Target Directory:** `reviews/`
 
 ---
 
