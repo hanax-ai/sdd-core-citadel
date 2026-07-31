@@ -13,6 +13,7 @@ import time
 DEFAULT_ANTHROPIC_MODEL = "claude-opus-5"
 DEFAULT_OPENAI_MODEL = "gpt-5.3-codex"
 DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+DEFAULT_TIMEOUT_SECONDS = 120
 
 FINDINGS_JSON_SCHEMA = {
     "type": "object",
@@ -48,7 +49,7 @@ async def call_researcher(system: str, user: str) -> dict:
 
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
+    client = anthropic.AsyncAnthropic(api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS)
     model = os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
     started = time.monotonic()
     try:
@@ -60,6 +61,8 @@ async def call_researcher(system: str, user: str) -> dict:
         )
     except anthropic.AnthropicError as exc:
         raise RuntimeError(f"Amigo-Researcher (Anthropic) call failed: {exc}") from exc
+    finally:
+        await client.close()
     text = next((block.text for block in response.content if block.type == "text"), "")
     return {
         "text": text,
@@ -78,7 +81,7 @@ async def call_builder(system: str, user: str) -> dict:
     import openai
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=api_key)
+    client = AsyncOpenAI(api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS)
     model = os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     started = time.monotonic()
     try:
@@ -89,12 +92,38 @@ async def call_builder(system: str, user: str) -> dict:
         )
     except openai.OpenAIError as exc:
         raise RuntimeError(f"Amigo-Builder (OpenAI) call failed: {exc}") from exc
+    finally:
+        await client.close()
     return {
         "text": response.output_text or "",
         "input_tokens": response.usage.input_tokens if response.usage else 0,
         "output_tokens": response.usage.output_tokens if response.usage else 0,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
     }
+
+
+def _validate_findings(findings, raw_text: str) -> list[dict]:
+    """Validate Gatekeeper findings shape; degrade to a blocking WARNING finding
+    on any mismatch instead of crashing or silently passing bad data through."""
+    fallback = [
+        {
+            "line": 0,
+            "severity": "WARNING",
+            "text": f"Gatekeeper returned malformed findings (validation failed): {raw_text[:200]}",
+        }
+    ]
+    if not isinstance(findings, list):
+        return fallback
+    for item in findings:
+        if not isinstance(item, dict):
+            return fallback
+        if not isinstance(item.get("line"), int):
+            return fallback
+        if item.get("severity") not in {"CRITICAL", "WARNING", "NOTE"}:
+            return fallback
+        if not isinstance(item.get("text"), str):
+            return fallback
+    return findings
 
 
 async def call_gatekeeper(system: str, user: str) -> dict:
@@ -107,7 +136,10 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     from google.genai import errors as genai_errors
     from google.genai import types as genai_types
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=genai_types.HttpOptions(timeout=DEFAULT_TIMEOUT_SECONDS * 1000),
+    )
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
     started = time.monotonic()
     try:
@@ -122,6 +154,8 @@ async def call_gatekeeper(system: str, user: str) -> dict:
         )
     except genai_errors.APIError as exc:
         raise RuntimeError(f"Amigo-Gatekeeper (Gemini) call failed: {exc}") from exc
+    finally:
+        await client.aio.aclose()
 
     raw_text = response.text or "{}"
     try:
@@ -129,6 +163,7 @@ async def call_gatekeeper(system: str, user: str) -> dict:
         findings = parsed.get("findings", [])
     except (json.JSONDecodeError, AttributeError):
         findings = [{"line": 0, "severity": "WARNING", "text": f"Gatekeeper returned unparseable output: {raw_text[:200]}"}]
+    findings = _validate_findings(findings, raw_text)
 
     usage = getattr(response, "usage_metadata", None)
     return {
