@@ -17,6 +17,7 @@ from harness.config import LOGS_DIR
 from harness.evidence_collector import collect_task_evidence
 
 MAX_ROUNDS = 3
+_PATH_TOKEN = re.compile(r"[\w./\\-]+\.\w+")
 
 
 def _slugify(text: str) -> str:
@@ -24,11 +25,22 @@ def _slugify(text: str) -> str:
     return slug[:50] or "task"
 
 
+def _extract_focus_files(task_description: str, target_dir: Path) -> list[Path]:
+    """Find file paths named in the task that actually exist under target_dir."""
+    found = []
+    for token in _PATH_TOKEN.findall(task_description):
+        candidate = (target_dir / token.replace("\\", "/")).resolve()
+        if candidate.is_file() and candidate not in found:
+            found.append(candidate)
+    return found
+
+
 def run_collaboration_cycle(
     target_dir: Path, task_description: str, log_dir: Path = LOGS_DIR
 ) -> dict:
     """Run the researcher/builder/gatekeeper remediation cycle for the target task."""
-    evidence = collect_task_evidence(target_dir)
+    focus_files = _extract_focus_files(task_description, target_dir)
+    evidence = collect_task_evidence(target_dir, focus_files=focus_files)
 
     researcher = AmigoResearcher()
     notes = researcher.analyze(task_description, evidence)
