@@ -29,9 +29,11 @@ def collect_task_evidence(target_dir: Path, focus_files: list[Path] | None = Non
                     "syntax_error": syntax_err,
                 })
 
+    diff_truncated = bool(git_diff) and len(git_diff) > 2000
     return {
         "target_dir": str(target_dir),
         "git_status": git_info,
         "git_diff_summary": git_diff[:2000] if git_diff else "NO_UNCOMMITTED_CHANGES",
+        "git_diff_truncated": diff_truncated,
         "file_evidence": file_evidence,
     }
