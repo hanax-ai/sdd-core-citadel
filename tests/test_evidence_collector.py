@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import harness.evidence_collector as ec
 
 
@@ -124,6 +126,28 @@ def test_secret_redaction_generic_api_key_assignment(tmp_path):
     assert entry["secrets_redacted"] is True
 
 
+def test_secret_redaction_prefixed_suffixed_credential_name(tmp_path):
+    # Real-world credential variable names rarely have the keyword sitting
+    # directly next to the separator -- AWS_SECRET_ACCESS_KEY and
+    # STRIPE_SECRET_KEY both have identifier characters before/after the
+    # "secret" keyword. The key names themselves must survive (only the
+    # quoted value is redacted).
+    target = tmp_path / "creds.py"
+    target.write_text(
+        'AWS_SECRET_ACCESS_KEY = "just-a-placeholder-value-1234567"\n'
+        'STRIPE_SECRET_KEY = "another-placeholder-value-7654321"\n',
+        encoding="utf-8",
+    )
+    evidence = ec.collect_task_evidence(tmp_path, focus_files=[target])
+    entry = evidence["file_evidence"][0]
+    assert "just-a-placeholder-value-1234567" not in entry["content"]
+    assert "another-placeholder-value-7654321" not in entry["content"]
+    assert "AWS_SECRET_ACCESS_KEY" in entry["content"]
+    assert "STRIPE_SECRET_KEY" in entry["content"]
+    assert entry["content"].count("[REDACTED-SECRET]") == 2
+    assert entry["secrets_redacted"] is True
+
+
 def test_secret_redaction_private_key_header(tmp_path):
     target = tmp_path / "key.pem"
     target.write_text(
@@ -173,6 +197,22 @@ def test_no_false_positive_redaction_on_clean_code(tmp_path):
     assert entry["content"] == clean_source
     assert entry["secrets_redacted"] is False
     assert "[REDACTED-SECRET]" not in entry["content"]
+
+
+def test_redact_secrets_fails_closed_on_scan_error(monkeypatch):
+    # A scanning failure must not fall back to returning the original,
+    # unredacted text -- that would defeat the control exactly when it's
+    # needed. Force a scan error and assert the content is replaced with the
+    # redaction placeholder and the flag is True (not the original text /
+    # False).
+    class _RaisingPattern:
+        def subn(self, *args, **kwargs):
+            raise re.error("boom")
+
+    monkeypatch.setattr(ec, "_SECRET_PATTERNS", [("aws_access_key", _RaisingPattern())])
+    text, flagged = ec._redact_secrets("some content with AKIA1234567890123456")
+    assert text == ec.REDACTED
+    assert flagged is True
 
 
 def test_git_diff_secrets_redacted(tmp_path, monkeypatch):
