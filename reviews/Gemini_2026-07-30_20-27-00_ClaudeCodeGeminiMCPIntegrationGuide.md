@@ -91,6 +91,18 @@ claude mcp add --scope user gemini-collab -- python3 ~/.claude-mcp-servers/gemin
 
 The official **[OpenAI Codex Plugin (`openai/codex-plugin-cc`)](https://github.com/openai/codex-plugin-cc)** integrates OpenAI's Codex engine as a secondary auditor.
 
+### 🔗 Installation (verified against the live repo + official Claude Code plugin docs)
+
+Since this is a plugin, not an MCP server, it installs via the plugin-marketplace flow — both commands run **inside an active `claude` session**:
+
+```bash
+/plugin marketplace add openai/codex-plugin-cc
+/plugin install codex@openai-codex
+/reload-plugins
+```
+
+`openai-codex` and `codex` are the exact marketplace and plugin names declared in the repo's own `.claude-plugin/marketplace.json` — confirmed by fetching that file directly, not guessed. There is no scriptable one-line terminal equivalent (`claude plugin install`) for a marketplace plugin you haven't added yet; `claude plugin marketplace add` is not a documented terminal subcommand, only the in-session `/plugin marketplace add` form is.
+
 ### ⚙️ Command Syntax (Colon Format)
 
 Codex commands in Claude Code use **colon syntax** (`/codex:<command>`):
@@ -131,7 +143,9 @@ Claude Code and the Codex CLI read MCP configurations from different files:
 }
 ```
 
-### 2. Codex CLI Config (`~/.codex/config.toml` or `~/.config/codex/config.toml`)
+### 2. Codex CLI Config (`~/.codex/config.toml`, overridable via `CODEX_HOME`; project-level `.codex/config.toml` overrides walk from repo root to cwd)
+
+*(Correction: `~/.config/codex/config.toml` is not a documented alternative — verified against OpenAI's official Codex config docs. Only `~/.codex/config.toml` is real.)*
 ```toml
 [mcp_servers.composio-router]
 command = "npx"
@@ -192,3 +206,4 @@ We are executing a cross-agent architectural pipeline:
 
 ---
 *Verified and corrected by Gemini. Execution halted as requested.*
+*Follow-up pass by Claude Code (2026-07-30): added the missing plugin-install command (verified against the live repo's `.claude-plugin/marketplace.json`) and removed the unverified `~/.config/codex/config.toml` alt path.*
