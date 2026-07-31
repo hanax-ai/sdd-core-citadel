@@ -79,6 +79,6 @@ Amigos-Agents/
 1. **Zero-Contamination Isolation:** Amigo Agents live completely outside target project directories. All execution logs, review transcripts, and transient fix packages are stored in `Amigos-Agents/`, keeping target manifests and SHA-256 hashes untouched.
 2. **Automated Implementer-Reviewer Loop:**
    - **Amigo-Builder (Codex / Claude Code):** Generates code patches and implementation plans.
-   - **Amigo-Gatekeeper (Gemini):** Audits code against security guidelines (`Directive-1.md`), verifies file table hashes, and checks strict schema constraints.
+   - **Amigo-Gatekeeper (Gemini):** Audits code against security guidelines, verifies file table hashes, and checks strict schema constraints.
    - If findings exist, the harness automatically feeds them back to the builder for remediation before human intervention.
 3. **Multi-Model Intelligence:** Leverages the unique strengths of each AI model (fast code authoring + deep cryptographic & architectural review).

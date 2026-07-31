@@ -85,7 +85,7 @@ flowchart TD
 
 ### Task 4: Construct Multi-Agent Implementer-Reviewer Engine (`Phase 4`)
 - [ ] Implement `agents/builder.py` (Amigo-Builder) to generate diff patches and implementation plans.
-- [ ] Implement `agents/gatekeeper.py` (Amigo-Gatekeeper) using Gemini rules (`Directive-1.md`) to perform substantive gate reviews.
+- [ ] Implement `agents/gatekeeper.py` (Amigo-Gatekeeper) using Gemini review rules to perform substantive gate reviews.
 - [ ] Implement `harness/remediation_loop.py` to automatically pass gatekeeper findings back to the builder for remediation fix rounds.
 - [ ] Verify automated fix loop cycles until 0 findings remain or max iterations are reached.
 
