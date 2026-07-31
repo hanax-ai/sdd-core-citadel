@@ -85,23 +85,44 @@ DASHBOARD_DEV_ORIGINS = [
 ]
 
 
-async def require_bridge_key(
-    x_bridge_key: str | None = Header(default=None, alias="X-Bridge-Key"),
-    key: str | None = Query(default=None),
-) -> None:
-    """Localhost-dev-tool auth: a single static shared secret, constant-time
-    compared. Not a login system -- see harness/BRIDGE_README.md.
-
-    Checks the `X-Bridge-Key` header first; if absent, falls back to a `?key=`
-    query param. The fallback exists for the SSE stream route -- the browser's
-    native EventSource API cannot set custom request headers, so that's the
-    only way it can authenticate."""
-    supplied = x_bridge_key or key
+def _check_bridge_key(supplied: str | None) -> None:
+    """Constant-time compare `supplied` against BRIDGE_API_KEY, raising 401 on
+    a missing/empty/wrong value. Shared by both auth dependencies below."""
     if not supplied or not hmac.compare_digest(supplied, BRIDGE_API_KEY):
         raise HTTPException(
             status_code=401,
             detail={"error_code": "UNAUTHORIZED", "message": "Missing or invalid X-Bridge-Key header."},
         )
+
+
+async def require_bridge_key(
+    x_bridge_key: str | None = Header(default=None, alias="X-Bridge-Key"),
+) -> None:
+    """Localhost-dev-tool auth: a single static shared secret, constant-time
+    compared. Not a login system -- see harness/BRIDGE_README.md.
+
+    Header-only. Applied to every route except the SSE stream (see
+    require_bridge_key_or_query below) -- a normal fetch() call can always
+    set a custom header, so there's no reason for any other route to also
+    accept the key over the query string (query params land in access logs,
+    proxy logs, and browser history)."""
+    _check_bridge_key(x_bridge_key)
+
+
+async def require_bridge_key_or_query(
+    x_bridge_key: str | None = Header(default=None, alias="X-Bridge-Key"),
+    key: str | None = Query(default=None),
+) -> None:
+    """Same shared-secret check as require_bridge_key, but also accepts the
+    key as a `?key=` query param. Applied ONLY to GET /api/stream/{run_id} --
+    the browser's native EventSource API cannot set custom request headers,
+    so that's the only way it can authenticate.
+
+    The header takes precedence over the query param: an empty-but-present
+    X-Bridge-Key header must NOT fall through to the query key, hence the
+    `is not None` check rather than `or` (which treats "" as falsy)."""
+    supplied = x_bridge_key if x_bridge_key is not None else key
+    _check_bridge_key(supplied)
 
 
 @asynccontextmanager
@@ -116,7 +137,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="SDD-Core CITADEL bridge", lifespan=lifespan, dependencies=[Depends(require_bridge_key)])
+app = FastAPI(title="SDD-Core CITADEL bridge", lifespan=lifespan)
 
 # The UI is served from the dashboard's own dev server (localhost only).
 app.add_middleware(
@@ -473,7 +494,7 @@ async def execute_run(run: Run) -> None:
 
 
 # -------------------------------------------------------------------- endpoints
-@app.post("/api/run-task")
+@app.post("/api/run-task", dependencies=[Depends(require_bridge_key)])
 async def run_task(req: RunTaskRequest) -> dict[str, str]:
     # ---- propose-only write rejection guard (zero contamination) --------------
     if req.apply_patch or req.write or req.mode.lower() != "propose":
@@ -496,7 +517,7 @@ async def run_task(req: RunTaskRequest) -> dict[str, str]:
     return {"run_id": run_id, "status": "started"}
 
 
-@app.get("/api/stream/{run_id}")
+@app.get("/api/stream/{run_id}", dependencies=[Depends(require_bridge_key_or_query)])
 async def stream(run_id: str, request: Request) -> EventSourceResponse:
     last_id = request.headers.get("last-event-id") or request.query_params.get("last_event_id")
 
@@ -549,12 +570,12 @@ async def stream(run_id: str, request: Request) -> EventSourceResponse:
     return EventSourceResponse(gen(), ping=15)
 
 
-@app.get("/api/logs")
+@app.get("/api/logs", dependencies=[Depends(require_bridge_key)])
 async def logs() -> list[dict[str, Any]]:
     return await asyncio.to_thread(_select_logs_sync)
 
 
-@app.get("/api/logs/{run_id}")
+@app.get("/api/logs/{run_id}", dependencies=[Depends(require_bridge_key)])
 async def transcript(run_id: str) -> dict[str, Any]:
     result = await asyncio.to_thread(_select_transcript_sync, run_id)
     if result is None:
@@ -562,12 +583,12 @@ async def transcript(run_id: str) -> dict[str, Any]:
     return result
 
 
-@app.get("/api/raid")
+@app.get("/api/raid", dependencies=[Depends(require_bridge_key)])
 async def raid_list() -> list[dict[str, Any]]:
     return await asyncio.to_thread(_select_raid_sync)
 
 
-@app.post("/api/raid")
+@app.post("/api/raid", dependencies=[Depends(require_bridge_key)])
 async def raid_create(item: RaidCreate) -> dict[str, Any]:
     row = {
         "id": f"RAID-{uuid.uuid4().hex[:6].upper()}",
@@ -582,7 +603,7 @@ async def raid_create(item: RaidCreate) -> dict[str, Any]:
 STARTED_AT = time.time()
 
 
-@app.get("/api/system/health")
+@app.get("/api/system/health", dependencies=[Depends(require_bridge_key)])
 async def system_health() -> dict[str, Any]:
     """Liveness + dependency probe used by the CITADEL header indicator."""
     problems: list[str] = []
@@ -615,7 +636,7 @@ async def system_health() -> dict[str, Any]:
     }
 
 
-@app.get("/api/system/status")
+@app.get("/api/system/status", dependencies=[Depends(require_bridge_key)])
 async def system_status() -> dict[str, Any]:
     return {
         "anthropic_key_present": bool(os.environ.get("ANTHROPIC_API_KEY")),
