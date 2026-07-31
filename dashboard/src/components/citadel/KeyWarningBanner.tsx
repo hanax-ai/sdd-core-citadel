@@ -14,6 +14,10 @@ export function useSystemStatus() {
   });
 }
 
+// NB: these are provider keys (bridge -> AI providers: ANTHROPIC_API_KEY,
+// OPENAI_API_KEY, GEMINI_API_KEY), configured server-side in the bridge's own
+// .env -- never entered through this UI. Not to be confused with the bridge
+// access key (this UI <-> bridge) entered in ConnectionControl.
 export function KeyWarningBanner() {
   const mode = useUIStore((s) => s.mode);
   const { data, error } = useSystemStatus();

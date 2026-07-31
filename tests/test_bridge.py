@@ -56,6 +56,18 @@ def test_correct_api_key_is_accepted_on_a_read_route(client):
     assert resp.status_code == 200
 
 
+def test_correct_api_key_via_query_param_is_accepted(client):
+    # EventSource (used by the SSE stream route) can't set headers, so the
+    # bridge must also accept the key as a `?key=` query param.
+    resp = client.get("/api/logs", params={"key": "test-secret-key"})
+    assert resp.status_code == 200
+
+
+def test_wrong_api_key_via_query_param_is_rejected(client):
+    resp = client.get("/api/logs", params={"key": "nope"})
+    assert resp.status_code == 401
+
+
 # --------------------------------------------------------------- target_dir allowlist
 def test_target_dir_outside_allowlist_is_rejected(client, tmp_path):
     outside = tmp_path.parent / "definitely-outside-allowlist"
