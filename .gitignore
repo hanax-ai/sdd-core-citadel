@@ -17,3 +17,6 @@ env/
 docs/
 reviews/
 
+# CodeGraph local index (machine-specific, rebuildable via `codegraph init`)
+.codegraph/
+
