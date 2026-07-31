@@ -37,6 +37,8 @@
   --color-codex-foreground: var(--codex-foreground);
   --color-gemini: var(--gemini);
   --color-gemini-foreground: var(--gemini-foreground);
+  --color-kimi: var(--kimi);
+  --color-kimi-foreground: var(--kimi-foreground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-warning: var(--warning);
@@ -90,6 +92,12 @@
   --codex-foreground: oklch(0.145 0.014 250);
   --gemini: oklch(0.78 0.13 210);
   --gemini-foreground: oklch(0.145 0.014 250);
+  /* Rose: the only hue region with real separation from the accents already in
+     use (300 claude, 205/210 primary/gemini, 163 codex/success, 85 warning,
+     22 destructive). Deliberately NOT in the text-gradient utility -- that
+     gradient is brand chrome, not an agent-identity statement. */
+  --kimi: oklch(0.78 0.16 340);
+  --kimi-foreground: oklch(0.145 0.014 250);
 
   --success: oklch(0.76 0.15 163);
   --warning: oklch(0.8 0.15 85);

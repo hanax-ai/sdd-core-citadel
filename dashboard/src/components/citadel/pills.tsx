@@ -1,21 +1,44 @@
-import { AGENT_META, accentClasses, type AgentId } from "@/lib/citadel/contract";
+import {
+  AGENT_META,
+  UNATTRIBUTED_GATEKEEPER,
+  accentClasses,
+  type AgentId,
+} from "@/lib/citadel/contract";
 import { cn } from "@/lib/utils";
+
+const BADGE_SHELL =
+  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium tracking-wide";
 
 export function AgentBadge({ agent, className }: { agent: AgentId; className?: string }) {
   const a = AGENT_META[agent];
   const c = accentClasses[agent];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium tracking-wide",
-        c.border,
-        c.bg,
-        c.text,
-        className,
-      )}
-    >
+    <span className={cn(BADGE_SHELL, c.border, c.bg, c.text, className)}>
       <span aria-hidden>{a.icon}</span>
       {a.name}
+    </span>
+  );
+}
+
+/**
+ * Gatekeeper badge for a message whose provider was never recorded.
+ *
+ * Names the role and nothing else — no vendor name, no vendor colour (it
+ * borrows the neutral `system` accent). Transcripts written before the harness
+ * stamped provider attribution have no answer to give, and substituting
+ * whatever GATEKEEPER_PROVIDER happens to be set to now is exactly the
+ * mis-attribution this replaces. In an audit trail an honest "unknown" beats a
+ * confident wrong answer.
+ */
+export function UnattributedGatekeeperBadge({ className }: { className?: string }) {
+  const c = accentClasses.system;
+  return (
+    <span
+      className={cn(BADGE_SHELL, c.border, c.bg, c.text, className)}
+      title="Provider not recorded — this run predates Gatekeeper provider attribution."
+    >
+      <span aria-hidden>{UNATTRIBUTED_GATEKEEPER.icon}</span>
+      {UNATTRIBUTED_GATEKEEPER.name}
     </span>
   );
 }

@@ -150,6 +150,13 @@ export const DEMO_TRANSCRIPT: Transcript = {
         agent: "Gatekeeper",
         round: 1,
         message_type: "AUDIT_FINDINGS",
+        // Provider attribution as the harness stamps it onto Gatekeeper
+        // messages, pinned to match DEMO_STATUS.gatekeeper_provider and
+        // DEMO_STATUS.gemini_model so the demo run is internally consistent.
+        // Researcher and Builder messages above carry no such fields -- those
+        // roles are not provider-switchable and the harness never stamps them.
+        provider: "gemini",
+        model: "gemini-3-pro",
         findings: [
           { line: 8, severity: "CRITICAL", text: "Lock must be a module-level singleton." },
           { line: 20, severity: "CRITICAL", text: "Missing timeout on refresh await." },
@@ -232,6 +239,8 @@ export const DEMO_TRANSCRIPT: Transcript = {
         agent: "Gatekeeper",
         round: 2,
         message_type: "AUDIT_FINDINGS",
+        provider: "gemini",
+        model: "gemini-3-pro",
         findings: [
           { line: 8, severity: "NOTE", text: "Module-level `_refresh_lock` — resolved in R2." },
           { line: 20, severity: "NOTE", text: "`asyncio.wait_for` timeout added — resolved." },
@@ -321,6 +330,12 @@ export const DEMO_LOGS: LogEntry[] = [
   },
 ];
 
+// Mirrors the real /api/system/status body key for key: the bridge always
+// reports BOTH provider pairs as raw facts and names the active one in
+// `gatekeeper_provider`. Pinned to "gemini" so the hosted demo renders exactly
+// as it always has -- gemini_key_present: false is what makes it show the
+// KeyWarningBanner. Flipping this to "kimi" (with moonshot_key_present: true)
+// would advertise provider switching instead, a product call, not a technical one.
 export const DEMO_STATUS: SystemStatus = {
   anthropic_key_present: true,
   openai_key_present: true,
@@ -328,6 +343,12 @@ export const DEMO_STATUS: SystemStatus = {
   anthropic_model: "claude-sonnet-4-6",
   openai_model: "gpt-5.2-codex",
   gemini_model: "gemini-3-pro",
+  moonshot_key_present: false,
+  // A frozen snapshot like its three siblings, deliberately NOT
+  // DEFAULT_MOONSHOT_MODEL: demo model ids are stale on purpose so nobody reads
+  // this file as a statement about what the live bridge runs.
+  moonshot_model: "kimi-k2",
+  gatekeeper_provider: "gemini",
 };
 
 const now = "2026-07-31T02:12:00Z";
@@ -395,7 +416,9 @@ export const DEMO_RAID: RaidItem[] = [
     title: "Unresolved runs lack a structured failure summary",
     description: "UNRESOLVED verdicts return no machine-readable reason payload.",
     status: "OPEN",
-    owner: "Gemini",
+    // Role, not provider: an owner named after one provider would silently
+    // become wrong the moment DEMO_STATUS.gatekeeper_provider is repinned.
+    owner: "Gatekeeper",
     phase: "Phase 4",
     created_at: now,
     updated_at: now,
@@ -403,7 +426,7 @@ export const DEMO_RAID: RaidItem[] = [
   {
     id: "D-01",
     type: "DEPENDENCY",
-    title: "ANTHROPIC / OPENAI / GEMINI keys present in the environment",
+    title: "Researcher / Builder / Gatekeeper provider keys present in the environment",
     description: "Bridge reports presence booleans only; values never cross the network boundary.",
     status: "CLOSED",
     owner: "Ops",
@@ -425,10 +448,35 @@ export const DEMO_RAID: RaidItem[] = [
 ];
 
 export const PHASES = [
-  { n: 1, name: "Harness Foundation", status: "COMPLETE", detail: "runner.py, config.py, llm_clients.py" },
-  { n: 2, name: "Tool Adapters & Safety Isolation", status: "COMPLETE", detail: "git_adapter.py, linter_adapter.py" },
+  {
+    n: 1,
+    name: "Harness Foundation",
+    status: "COMPLETE",
+    detail: "runner.py, config.py, llm_clients.py",
+  },
+  {
+    n: 2,
+    name: "Tool Adapters & Safety Isolation",
+    status: "COMPLETE",
+    detail: "git_adapter.py, linter_adapter.py",
+  },
   { n: 3, name: "Evidence Collection Engine", status: "COMPLETE", detail: "evidence_collector.py" },
-  { n: 4, name: "Multi-Agent Collaboration Engine", status: "COMPLETE", detail: "Mocked & live verified" },
-  { n: 5, name: "Terminal UI & Streaming Command Center", status: "IN PROGRESS", detail: "dashboard/ + harness/bridge.py" },
-  { n: 6, name: "Verification Harness & CI Suite", status: "UPCOMING", detail: "Regression + CI gates" },
+  {
+    n: 4,
+    name: "Multi-Agent Collaboration Engine",
+    status: "COMPLETE",
+    detail: "Mocked & live verified",
+  },
+  {
+    n: 5,
+    name: "Terminal UI & Streaming Command Center",
+    status: "IN PROGRESS",
+    detail: "dashboard/ + harness/bridge.py",
+  },
+  {
+    n: 6,
+    name: "Verification Harness & CI Suite",
+    status: "UPCOMING",
+    detail: "Regression + CI gates",
+  },
 ];

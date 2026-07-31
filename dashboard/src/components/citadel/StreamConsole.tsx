@@ -1,10 +1,27 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Play, Square, Eraser, Rocket, WifiOff, Loader2, AlertTriangle, RotateCw } from "lucide-react";
+import {
+  Play,
+  Square,
+  Eraser,
+  Rocket,
+  WifiOff,
+  Loader2,
+  AlertTriangle,
+  RotateCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentBadge, StatusPill } from "./pills";
 import { StageTracker } from "./StageTracker";
-import { AGENT_META, ROLE_TO_AGENT, accentClasses, type CitadelEvent } from "@/lib/citadel/contract";
+import {
+  AGENT_META,
+  DEFAULT_GATEKEEPER_AGENT,
+  accentClasses,
+  roleToAgent,
+  type CitadelEvent,
+  type GatekeeperAgentId,
+} from "@/lib/citadel/contract";
+import { useGatekeeperAgent } from "./KeyWarningBanner";
 import { cn } from "@/lib/utils";
 import type { useAgentStream } from "@/hooks/useAgentStream";
 
@@ -20,6 +37,7 @@ export function StreamConsole({
   sidebar?: ReactNode;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
+  const gatekeeper = useGatekeeperAgent();
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [run.events.length]);
@@ -63,142 +81,142 @@ export function StreamConsole({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
-      <section className="glass overflow-hidden rounded-lg">
+        <section className="glass overflow-hidden rounded-lg">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-xs text-muted-foreground">
+                {run.runId ? `stream/${run.runId}` : "amigo://stream"}
+              </span>
+              <StatusPill
+                label={statusLabel(run)}
+                tone={statusTone(run)}
+                live={run.status === "running"}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={onDispatch} disabled={run.isRunning}>
+                <Play /> Start run
+              </Button>
+              <Button size="sm" variant="outline" onClick={run.cancel} disabled={!run.isRunning}>
+                <Square /> Cancel
+              </Button>
+              <Button size="sm" variant="ghost" onClick={run.clear}>
+                <Eraser /> Clear
+              </Button>
+            </div>
+          </header>
 
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-muted-foreground">
-              {run.runId ? `stream/${run.runId}` : "amigo://stream"}
-            </span>
-            <StatusPill
-              label={statusLabel(run)}
-              tone={statusTone(run)}
-              live={run.status === "running"}
-            />
+          <div className="border-b border-border px-5 py-3">
+            <StageTracker stage={run.stage} round={run.rounds} />
           </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={onDispatch} disabled={run.isRunning}>
-              <Play /> Start run
-            </Button>
-            <Button size="sm" variant="outline" onClick={run.cancel} disabled={!run.isRunning}>
-              <Square /> Cancel
-            </Button>
-            <Button size="sm" variant="ghost" onClick={run.clear}>
-              <Eraser /> Clear
-            </Button>
-          </div>
-        </header>
 
-        <div className="border-b border-border px-5 py-3">
-          <StageTracker stage={run.stage} round={run.rounds} />
-        </div>
-
-        {run.status === "dispatching" && (
-          <div className="flex items-center gap-2 border-b border-primary/30 bg-primary/10 px-5 py-2 text-xs text-primary">
-            <Loader2 className="size-3.5 animate-spin" />
-            Dispatching task to the bridge — waiting for a run id…
-          </div>
-        )}
-
-        {run.status !== "error" && run.connection === "connecting" && (
-          <div className="flex items-center gap-2 border-b border-primary/30 bg-primary/10 px-5 py-2 text-xs text-primary">
-            <Loader2 className="size-3.5 animate-spin" />
-            Opening event stream…
-          </div>
-        )}
-
-        {run.connection === "reconnecting" && (
-          <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-5 py-2 text-xs text-warning">
-            <WifiOff className="size-3.5" />
-            Stream disconnected. Reconnecting in {run.retryIn}s… (resuming from last event ID)
-          </div>
-        )}
-
-        {run.connection === "lost" && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">
-            <WifiOff className="size-3.5" />
-            Connection lost after repeated retries. Auto-reconnect stopped.
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-auto h-6 px-2 text-[11px]"
-              onClick={run.reconnect}
-            >
-              <RotateCw className="size-3" /> Reconnect
-            </Button>
-          </div>
-        )}
-
-        {run.status === "error" && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">
-            <AlertTriangle className="size-3.5" />
-            <span className="font-mono">{run.errorText ?? "Bridge unreachable"}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-auto h-6 px-2 text-[11px]"
-              onClick={onDispatch}
-            >
-              <RotateCw className="size-3" /> Retry
-            </Button>
-          </div>
-        )}
-
-
-        <div className="h-[560px] overflow-y-auto p-5">
-          {cards.length === 0 ? (
-            <EmptyState onDispatch={onDispatch} disabled={run.isRunning} />
-          ) : (
-            <div className="space-y-3">
-              <AnimatePresence initial={false}>
-                {cards.map((e) => (
-                  <EventCard key={e.id} event={e} />
-                ))}
-              </AnimatePresence>
-              {run.status === "running" && (
-                <p className="font-mono text-sm text-muted-foreground">
-                  <span className="live-dot inline-block">▍</span> awaiting next agent event…
-                </p>
-              )}
-              {run.errorText && (
-                <p className="font-mono text-sm text-destructive">{run.errorText}</p>
-              )}
+          {run.status === "dispatching" && (
+            <div className="flex items-center gap-2 border-b border-primary/30 bg-primary/10 px-5 py-2 text-xs text-primary">
+              <Loader2 className="size-3.5 animate-spin" />
+              Dispatching task to the bridge — waiting for a run id…
             </div>
           )}
-          <div ref={endRef} />
-        </div>
-      </section>
 
-      <aside className="space-y-4">
-        {sidebar}
-        <div className="glass rounded-lg p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Live metrics
-          </h3>
-          <dl className="mt-4 space-y-3 text-sm">
-            <Metric label="Agent messages" value={String(run.invocations)} />
-            <Metric label="Tokens used" value={run.tokens.toLocaleString()} />
-            <Metric label="Rounds" value={String(run.rounds)} />
-            <Metric label="Elapsed" value={`${(run.elapsed / 1000).toFixed(1)}s`} />
-            <Metric label="Verdict" value={run.verdict ?? "—"} />
-            <Metric label="Mode" value="propose-only" />
-          </dl>
-        </div>
+          {run.status !== "error" && run.connection === "connecting" && (
+            <div className="flex items-center gap-2 border-b border-primary/30 bg-primary/10 px-5 py-2 text-xs text-primary">
+              <Loader2 className="size-3.5 animate-spin" />
+              Opening event stream…
+            </div>
+          )}
 
-        <div className="glass rounded-lg p-5">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Agent roster
-          </h3>
-          <ul className="mt-4 space-y-3">
-            {(["claude", "codex", "gemini"] as const).map((id) => (
-              <li key={id} className="flex items-center justify-between gap-2">
-                <AgentBadge agent={id} />
-                <span className="text-[11px] text-muted-foreground">{AGENT_META[id].provider}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </aside>
+          {run.connection === "reconnecting" && (
+            <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-5 py-2 text-xs text-warning">
+              <WifiOff className="size-3.5" />
+              Stream disconnected. Reconnecting in {run.retryIn}s… (resuming from last event ID)
+            </div>
+          )}
+
+          {run.connection === "lost" && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">
+              <WifiOff className="size-3.5" />
+              Connection lost after repeated retries. Auto-reconnect stopped.
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto h-6 px-2 text-[11px]"
+                onClick={run.reconnect}
+              >
+                <RotateCw className="size-3" /> Reconnect
+              </Button>
+            </div>
+          )}
+
+          {run.status === "error" && (
+            <div className="flex flex-wrap items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-xs text-destructive">
+              <AlertTriangle className="size-3.5" />
+              <span className="font-mono">{run.errorText ?? "Bridge unreachable"}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto h-6 px-2 text-[11px]"
+                onClick={onDispatch}
+              >
+                <RotateCw className="size-3" /> Retry
+              </Button>
+            </div>
+          )}
+
+          <div className="h-[560px] overflow-y-auto p-5">
+            {cards.length === 0 ? (
+              <EmptyState onDispatch={onDispatch} disabled={run.isRunning} />
+            ) : (
+              <div className="space-y-3">
+                <AnimatePresence initial={false}>
+                  {cards.map((e) => (
+                    <EventCard key={e.id} event={e} gatekeeper={gatekeeper} />
+                  ))}
+                </AnimatePresence>
+                {run.status === "running" && (
+                  <p className="font-mono text-sm text-muted-foreground">
+                    <span className="live-dot inline-block">▍</span> awaiting next agent event…
+                  </p>
+                )}
+                {run.errorText && (
+                  <p className="font-mono text-sm text-destructive">{run.errorText}</p>
+                )}
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          {sidebar}
+          <div className="glass rounded-lg p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Live metrics
+            </h3>
+            <dl className="mt-4 space-y-3 text-sm">
+              <Metric label="Agent messages" value={String(run.invocations)} />
+              <Metric label="Tokens used" value={run.tokens.toLocaleString()} />
+              <Metric label="Rounds" value={String(run.rounds)} />
+              <Metric label="Elapsed" value={`${(run.elapsed / 1000).toFixed(1)}s`} />
+              <Metric label="Verdict" value={run.verdict ?? "—"} />
+              <Metric label="Mode" value="propose-only" />
+            </dl>
+          </div>
+
+          <div className="glass rounded-lg p-5">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Agent roster
+            </h3>
+            <ul className="mt-4 space-y-3">
+              {(["claude", "codex", gatekeeper ?? DEFAULT_GATEKEEPER_AGENT] as const).map((id) => (
+                <li key={id} className="flex items-center justify-between gap-2">
+                  <AgentBadge agent={id} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {AGENT_META[id].provider}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -234,8 +252,13 @@ function Kpi({
   );
 }
 
-
-function EventCard({ event }: { event: CitadelEvent }) {
+function EventCard({
+  event,
+  gatekeeper,
+}: {
+  event: CitadelEvent;
+  gatekeeper: GatekeeperAgentId | null;
+}) {
   if (event.type === "stage_change") {
     return (
       <motion.div
@@ -296,7 +319,13 @@ function EventCard({ event }: { event: CitadelEvent }) {
 
   if (event.type !== "agent_message") return null;
 
-  const agent = ROLE_TO_AGENT[event.agent];
+  // The event's OWN attribution wins where it exists: the harness stamps the
+  // provider that actually served this message, and a live stream can outlive a
+  // GATEKEEPER_PROVIDER change mid-session. Current config is the fallback only
+  // for events from a harness that predates the field -- unlike replay, that
+  // fallback is defensible here because these events are being produced by the
+  // very configuration the status endpoint is reporting.
+  const agent = roleToAgent(event.agent, event.provider ?? gatekeeper);
   const c = accentClasses[agent];
 
   return (
@@ -350,6 +379,10 @@ function EventCard({ event }: { event: CitadelEvent }) {
 }
 
 function EmptyState({ onDispatch, disabled }: { onDispatch: () => void; disabled: boolean }) {
+  // Reads the hook directly rather than taking a prop: react-query dedupes the
+  // shared status query, so this costs nothing and keeps the call site simple.
+  const gatekeeper = useGatekeeperAgent();
+  const gatekeeperName = AGENT_META[gatekeeper ?? DEFAULT_GATEKEEPER_AGENT].name;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
       <div className="grid size-16 place-items-center rounded-lg border border-border bg-muted/30 text-2xl">
@@ -358,8 +391,8 @@ function EmptyState({ onDispatch, disabled }: { onDispatch: () => void; disabled
       <div>
         <p className="text-sm font-medium">No runs yet</p>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Dispatch a task to watch Claude, Codex and Gemini collaborate in real time. The harness
-          never writes to your target repository.
+          Dispatch a task to watch Claude, Codex and {gatekeeperName} collaborate in real time. The
+          harness never writes to your target repository.
         </p>
       </div>
       <Button onClick={onDispatch} disabled={disabled}>

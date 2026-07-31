@@ -13,13 +13,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Real-time multi-agent command center for the Amigo Agents harness: live Claude, Codex and Gemini stream, propose-only patches, deterministic replay.",
+          "Real-time multi-agent command center for the Amigo Agents harness: live Researcher, Builder and Gatekeeper stream, propose-only patches, deterministic replay.",
       },
       { property: "og:title", content: "SDD-Core CITADEL — Agent Command Center" },
       {
         property: "og:description",
         content:
-          "Stream Claude, Codex and Gemini collaboration live, review propose-only diffs and replay past runs.",
+          "Stream Researcher, Builder and Gatekeeper collaboration live, review propose-only diffs and replay past runs.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

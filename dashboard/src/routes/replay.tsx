@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Play, Pause, RotateCcw, Download, Sheet, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/citadel/AppShell";
-import { AgentBadge, StatusPill } from "@/components/citadel/pills";
+import { AgentBadge, StatusPill, UnattributedGatekeeperBadge } from "@/components/citadel/pills";
 import { Highlight } from "@/components/citadel/Highlight";
 import { ReplaySummaryPanel } from "@/components/citadel/ReplaySummary";
 import { eventsToCsv } from "@/lib/citadel/replay-stats";
@@ -22,7 +22,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { citadelApi } from "@/lib/citadel/client";
 import { useUIStore } from "@/stores/useUIStore";
-import { AGENT_ROLES, ROLE_TO_AGENT, type AgentRole } from "@/lib/citadel/contract";
+import {
+  AGENT_ROLES,
+  asGatekeeperAgent,
+  roleToAgent,
+  type AgentRole,
+} from "@/lib/citadel/contract";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/replay")({
@@ -55,7 +60,6 @@ const EVENT_TYPES = [
 ] as const;
 type EventType = (typeof EVENT_TYPES)[number];
 
-
 const EVENT_TYPE_LABEL: Record<EventType, string> = {
   stage_change: "Stage change",
   agent_message: "Agent message",
@@ -63,6 +67,21 @@ const EVENT_TYPE_LABEL: Record<EventType, string> = {
   run_complete: "Run complete",
   error: "Error",
 };
+
+/**
+ * Badge for a historical event, attributed from the TRANSCRIPT alone.
+ *
+ * The Gatekeeper is the one provider-switchable role, so a run recorded while
+ * Gemini served it must keep showing Gemini even if Kimi is configured today.
+ * Current config is deliberately not consulted: guessing it is what turned a
+ * replayed audit trail into a confident lie. Events with no persisted provider
+ * — everything written before the harness stamped one — say so instead.
+ */
+function ReplayAgentBadge({ role, provider }: { role: AgentRole; provider?: unknown }) {
+  if (role !== "Gatekeeper") return <AgentBadge agent={roleToAgent(role)} />;
+  const attributed = asGatekeeperAgent(provider);
+  return attributed ? <AgentBadge agent={attributed} /> : <UnattributedGatekeeperBadge />;
+}
 
 function ReplayPage() {
   const { mode, bridgeUrl, replaySpeed, setReplaySpeed } = useUIStore();
@@ -140,8 +159,6 @@ function ReplayPage() {
     return onlyMatches && kw ? base.filter(matchesKeyword) : base;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, typeFilter, agentFilter, onlyMatches, kw]);
-
-
 
   // Full virtualization — only rows in view are mounted, no manual paging.
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -262,9 +279,6 @@ function ReplayPage() {
     });
   }
 
-
-
-
   return (
     <AppShell
       title="Run replay"
@@ -366,7 +380,6 @@ function ReplayPage() {
             </Button>
           </header>
 
-
           <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-2.5">
             <div className="relative min-w-[180px] flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -399,11 +412,11 @@ function ReplayPage() {
                 );
               })}
             </div>
-            <Select
-              value={typeFilter}
-              onValueChange={(v) => setTypeFilter(v as EventType | "all")}
-            >
-              <SelectTrigger className="h-8 w-[168px] text-[13px]" aria-label="Filter by event type">
+            <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as EventType | "all")}>
+              <SelectTrigger
+                className="h-8 w-[168px] text-[13px]"
+                aria-label="Filter by event type"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -442,18 +455,14 @@ function ReplayPage() {
 
           <ReplaySummaryPanel events={filteredRun} />
 
-
-
           <div ref={scrollRef} className="h-[540px] overflow-y-auto p-5">
             {transcript.isLoading && <Skeleton className="h-full w-full" />}
-            <div
-              className="relative w-full"
-              style={{ height: `${virtualizer.getTotalSize()}px` }}
-            >
+            <div className="relative w-full" style={{ height: `${virtualizer.getTotalSize()}px` }}>
               {virtualizer.getVirtualItems().map((row) => {
                 const e = visible[row.index];
                 const p = e.payload as {
                   agent?: AgentRole;
+                  provider?: unknown;
                   content?: string;
                   stage?: string;
                   message_type?: string;
@@ -487,7 +496,7 @@ function ReplayPage() {
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <AgentBadge agent={ROLE_TO_AGENT[p.agent]} />
+                        <ReplayAgentBadge role={p.agent} provider={p.provider} />
                         <span className="font-mono text-[11px] text-muted-foreground">
                           +{(e.offset_ms / 1000).toFixed(1)}s ·{" "}
                           <Highlight text={p.message_type} query={kw} />
@@ -525,7 +534,6 @@ function ReplayPage() {
               </p>
             )}
           </div>
-
         </div>
       </div>
     </AppShell>
