@@ -16,16 +16,20 @@ DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
 DEFAULT_TIMEOUT_SECONDS = 120
 
 
-def _fallback_config(role: str) -> tuple[str | None, str | None]:
-    """Read <ROLE>_FALLBACK_BASE_URL / <ROLE>_FALLBACK_MODEL from the
-    environment. A fallback is only considered configured when both are
-    set -- returns (None, None) otherwise, which is this repo's default
-    out-of-the-box behavior (no fallback vars in .env.example)."""
+def _fallback_config(role: str) -> tuple[str | None, str | None, str | None]:
+    """Read <ROLE>_FALLBACK_BASE_URL / <ROLE>_FALLBACK_MODEL / <ROLE>_FALLBACK_API_KEY
+    from the environment. A fallback is only considered configured when all
+    three are set -- returns (None, None, None) otherwise, which is this
+    repo's default out-of-the-box behavior (no fallback vars in .env.example).
+    Requiring a distinct fallback API key prevents the primary provider's real
+    key from being sent to a fallback endpoint that may not be operated by the
+    same trusted party (see RAID I15)."""
     base_url = os.getenv(f"{role}_FALLBACK_BASE_URL")
     model = os.getenv(f"{role}_FALLBACK_MODEL")
-    if not base_url or not model:
-        return None, None
-    return base_url, model
+    fallback_key = os.getenv(f"{role}_FALLBACK_API_KEY")
+    if not base_url or not model or not fallback_key:
+        return None, None, None
+    return base_url, model, fallback_key
 
 
 def _is_gemini_quota_error(exc) -> bool:
@@ -73,8 +77,10 @@ async def call_researcher(system: str, user: str) -> dict:
     model = os.getenv("ANTHROPIC_MODEL", DEFAULT_ANTHROPIC_MODEL)
     started = time.monotonic()
 
-    async def _request(base_url: str | None, request_model: str):
-        client = anthropic.AsyncAnthropic(api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS, base_url=base_url)
+    async def _request(base_url: str | None, request_model: str, request_key: str | None = None):
+        client = anthropic.AsyncAnthropic(
+            api_key=request_key or api_key, timeout=DEFAULT_TIMEOUT_SECONDS, base_url=base_url
+        )
         try:
             return await client.messages.create(
                 model=request_model,
@@ -89,14 +95,15 @@ async def call_researcher(system: str, user: str) -> dict:
     try:
         response = await _request(None, model)
     except anthropic.RateLimitError as exc:
-        fallback_base_url, fallback_model = _fallback_config("RESEARCHER")
+        fallback_base_url, fallback_model, fallback_key = _fallback_config("RESEARCHER")
         if not fallback_base_url:
             raise RuntimeError(
                 f"Amigo-Researcher (Anthropic) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set RESEARCHER_FALLBACK_BASE_URL/RESEARCHER_FALLBACK_MODEL)."
+                "no fallback configured (set RESEARCHER_FALLBACK_BASE_URL/RESEARCHER_FALLBACK_MODEL/"
+                "RESEARCHER_FALLBACK_API_KEY)."
             ) from exc
         try:
-            response = await _request(fallback_base_url, fallback_model)
+            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
         except anthropic.AnthropicError as fallback_exc:
             raise RuntimeError(
                 f"Amigo-Researcher (Anthropic) call failed: quota/rate-limit exceeded ({exc}); "
@@ -131,8 +138,8 @@ async def call_builder(system: str, user: str) -> dict:
     model = os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
     started = time.monotonic()
 
-    async def _request(base_url: str | None, request_model: str):
-        client = AsyncOpenAI(api_key=api_key, timeout=DEFAULT_TIMEOUT_SECONDS, base_url=base_url)
+    async def _request(base_url: str | None, request_model: str, request_key: str | None = None):
+        client = AsyncOpenAI(api_key=request_key or api_key, timeout=DEFAULT_TIMEOUT_SECONDS, base_url=base_url)
         try:
             return await client.responses.create(
                 model=request_model,
@@ -146,14 +153,15 @@ async def call_builder(system: str, user: str) -> dict:
     try:
         response = await _request(None, model)
     except openai.RateLimitError as exc:
-        fallback_base_url, fallback_model = _fallback_config("BUILDER")
+        fallback_base_url, fallback_model, fallback_key = _fallback_config("BUILDER")
         if not fallback_base_url:
             raise RuntimeError(
                 f"Amigo-Builder (OpenAI) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set BUILDER_FALLBACK_BASE_URL/BUILDER_FALLBACK_MODEL)."
+                "no fallback configured (set BUILDER_FALLBACK_BASE_URL/BUILDER_FALLBACK_MODEL/"
+                "BUILDER_FALLBACK_API_KEY)."
             ) from exc
         try:
-            response = await _request(fallback_base_url, fallback_model)
+            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
         except openai.OpenAIError as fallback_exc:
             raise RuntimeError(
                 f"Amigo-Builder (OpenAI) call failed: quota/rate-limit exceeded ({exc}); "
@@ -212,9 +220,9 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     model = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
     started = time.monotonic()
 
-    async def _request(base_url: str | None, request_model: str):
+    async def _request(base_url: str | None, request_model: str, request_key: str | None = None):
         client = genai.Client(
-            api_key=api_key,
+            api_key=request_key or api_key,
             http_options=genai_types.HttpOptions(timeout=DEFAULT_TIMEOUT_SECONDS * 1000, base_url=base_url),
         )
         try:
@@ -236,14 +244,15 @@ async def call_gatekeeper(system: str, user: str) -> dict:
     except genai_errors.APIError as exc:
         if not _is_gemini_quota_error(exc):
             raise RuntimeError(f"Amigo-Gatekeeper (Gemini) call failed: {exc}") from exc
-        fallback_base_url, fallback_model = _fallback_config("GATEKEEPER")
+        fallback_base_url, fallback_model, fallback_key = _fallback_config("GATEKEEPER")
         if not fallback_base_url:
             raise RuntimeError(
                 f"Amigo-Gatekeeper (Gemini) call failed: quota/rate-limit exceeded ({exc}); "
-                "no fallback configured (set GATEKEEPER_FALLBACK_BASE_URL/GATEKEEPER_FALLBACK_MODEL)."
+                "no fallback configured (set GATEKEEPER_FALLBACK_BASE_URL/GATEKEEPER_FALLBACK_MODEL/"
+                "GATEKEEPER_FALLBACK_API_KEY)."
             ) from exc
         try:
-            response = await _request(fallback_base_url, fallback_model)
+            response = await _request(fallback_base_url, fallback_model, request_key=fallback_key)
         except genai_errors.APIError as fallback_exc:
             raise RuntimeError(
                 f"Amigo-Gatekeeper (Gemini) call failed: quota/rate-limit exceeded ({exc}); "

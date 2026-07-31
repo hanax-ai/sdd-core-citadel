@@ -177,7 +177,7 @@ async def test_call_researcher_quota_error_no_fallback_raises_quota_specific_err
     fake_cls = _make_fake_anthropic_client(fail_with=_anthropic_rate_limit_error())
     monkeypatch.setattr("anthropic.AsyncAnthropic", fake_cls)
 
-    with pytest.raises(RuntimeError, match="(?i)quota|rate.limit"):
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
         await llm_clients.call_researcher("system", "user")
 
     assert len(fake_cls.construct_calls) == 1
@@ -187,6 +187,7 @@ async def test_call_researcher_quota_error_with_fallback_retries_and_marks_resul
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("RESEARCHER_FALLBACK_BASE_URL", "http://localhost:8081/v1")
     monkeypatch.setenv("RESEARCHER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_API_KEY", "fallback-key")
     fake_cls = _make_fake_anthropic_client(fail_with=_anthropic_rate_limit_error(), succeed_text="fallback answer")
     monkeypatch.setattr("anthropic.AsyncAnthropic", fake_cls)
 
@@ -211,6 +212,37 @@ async def test_call_researcher_non_quota_error_does_not_trigger_fallback(monkeyp
         await llm_clients.call_researcher("system", "user")
 
     assert "quota" not in str(excinfo.value).lower()
+    assert len(fake_cls.construct_calls) == 1
+
+
+async def test_call_researcher_fallback_uses_fallback_api_key_not_primary(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "primary-key")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_BASE_URL", "http://localhost:8081/v1")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_API_KEY", "fallback-key")
+    fake_cls = _make_fake_anthropic_client(fail_with=_anthropic_rate_limit_error(), succeed_text="fallback answer")
+    monkeypatch.setattr("anthropic.AsyncAnthropic", fake_cls)
+
+    result = await llm_clients.call_researcher("system", "user")
+
+    assert result["fallback_used"] is True
+    assert len(fake_cls.construct_calls) == 2
+    assert fake_cls.construct_calls[0]["api_key"] == "primary-key"
+    assert fake_cls.construct_calls[1]["api_key"] == "fallback-key"
+    assert fake_cls.construct_calls[1]["api_key"] != "primary-key"
+
+
+async def test_call_researcher_fallback_base_url_without_fallback_key_does_not_activate(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "primary-key")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_BASE_URL", "http://localhost:8081/v1")
+    monkeypatch.setenv("RESEARCHER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.delenv("RESEARCHER_FALLBACK_API_KEY", raising=False)
+    fake_cls = _make_fake_anthropic_client(fail_with=_anthropic_rate_limit_error())
+    monkeypatch.setattr("anthropic.AsyncAnthropic", fake_cls)
+
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
+        await llm_clients.call_researcher("system", "user")
+
     assert len(fake_cls.construct_calls) == 1
 
 
@@ -272,7 +304,7 @@ async def test_call_builder_quota_error_no_fallback_raises_quota_specific_error(
     fake_cls = _make_fake_openai_client(fail_with=_openai_rate_limit_error())
     monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
 
-    with pytest.raises(RuntimeError, match="(?i)quota|rate.limit"):
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
         await llm_clients.call_builder("system", "user")
 
     assert len(fake_cls.construct_calls) == 1
@@ -282,6 +314,7 @@ async def test_call_builder_quota_error_with_fallback_retries_and_marks_result(m
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("BUILDER_FALLBACK_BASE_URL", "http://localhost:8082/v1")
     monkeypatch.setenv("BUILDER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("BUILDER_FALLBACK_API_KEY", "fallback-key")
     fake_cls = _make_fake_openai_client(fail_with=_openai_rate_limit_error(), succeed_text="fallback answer")
     monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
 
@@ -306,6 +339,37 @@ async def test_call_builder_non_quota_error_does_not_trigger_fallback(monkeypatc
         await llm_clients.call_builder("system", "user")
 
     assert "quota" not in str(excinfo.value).lower()
+    assert len(fake_cls.construct_calls) == 1
+
+
+async def test_call_builder_fallback_uses_fallback_api_key_not_primary(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "primary-key")
+    monkeypatch.setenv("BUILDER_FALLBACK_BASE_URL", "http://localhost:8082/v1")
+    monkeypatch.setenv("BUILDER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("BUILDER_FALLBACK_API_KEY", "fallback-key")
+    fake_cls = _make_fake_openai_client(fail_with=_openai_rate_limit_error(), succeed_text="fallback answer")
+    monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
+
+    result = await llm_clients.call_builder("system", "user")
+
+    assert result["fallback_used"] is True
+    assert len(fake_cls.construct_calls) == 2
+    assert fake_cls.construct_calls[0]["api_key"] == "primary-key"
+    assert fake_cls.construct_calls[1]["api_key"] == "fallback-key"
+    assert fake_cls.construct_calls[1]["api_key"] != "primary-key"
+
+
+async def test_call_builder_fallback_base_url_without_fallback_key_does_not_activate(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "primary-key")
+    monkeypatch.setenv("BUILDER_FALLBACK_BASE_URL", "http://localhost:8082/v1")
+    monkeypatch.setenv("BUILDER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.delenv("BUILDER_FALLBACK_API_KEY", raising=False)
+    fake_cls = _make_fake_openai_client(fail_with=_openai_rate_limit_error())
+    monkeypatch.setattr("openai.AsyncOpenAI", fake_cls)
+
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
+        await llm_clients.call_builder("system", "user")
+
     assert len(fake_cls.construct_calls) == 1
 
 
@@ -364,7 +428,7 @@ async def test_call_gatekeeper_quota_error_no_fallback_raises_quota_specific_err
     fake_cls = _make_fake_gemini_fallback_client(fail_with=_gemini_quota_error())
     monkeypatch.setattr("google.genai.Client", fake_cls)
 
-    with pytest.raises(RuntimeError, match="(?i)quota|rate.limit"):
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
         await llm_clients.call_gatekeeper("system", "user")
 
     assert len(fake_cls.construct_calls) == 1
@@ -374,6 +438,7 @@ async def test_call_gatekeeper_quota_error_with_fallback_retries_and_marks_resul
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setenv("GATEKEEPER_FALLBACK_BASE_URL", "http://localhost:8083/v1")
     monkeypatch.setenv("GATEKEEPER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_API_KEY", "fallback-key")
     valid_findings = [{"line": 1, "severity": "NOTE", "text": "from fallback"}]
     raw_text = json.dumps({"findings": valid_findings})
     fake_cls = _make_fake_gemini_fallback_client(fail_with=_gemini_quota_error(), raw_text=raw_text)
@@ -400,4 +465,37 @@ async def test_call_gatekeeper_non_quota_error_does_not_trigger_fallback(monkeyp
         await llm_clients.call_gatekeeper("system", "user")
 
     assert "quota" not in str(excinfo.value).lower()
+    assert len(fake_cls.construct_calls) == 1
+
+
+async def test_call_gatekeeper_fallback_uses_fallback_api_key_not_primary(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "primary-key")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_BASE_URL", "http://localhost:8083/v1")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_API_KEY", "fallback-key")
+    valid_findings = [{"line": 1, "severity": "NOTE", "text": "from fallback"}]
+    raw_text = json.dumps({"findings": valid_findings})
+    fake_cls = _make_fake_gemini_fallback_client(fail_with=_gemini_quota_error(), raw_text=raw_text)
+    monkeypatch.setattr("google.genai.Client", fake_cls)
+
+    result = await llm_clients.call_gatekeeper("system", "user")
+
+    assert result["fallback_used"] is True
+    assert len(fake_cls.construct_calls) == 2
+    assert fake_cls.construct_calls[0]["api_key"] == "primary-key"
+    assert fake_cls.construct_calls[1]["api_key"] == "fallback-key"
+    assert fake_cls.construct_calls[1]["api_key"] != "primary-key"
+
+
+async def test_call_gatekeeper_fallback_base_url_without_fallback_key_does_not_activate(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "primary-key")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_BASE_URL", "http://localhost:8083/v1")
+    monkeypatch.setenv("GATEKEEPER_FALLBACK_MODEL", "local-fallback-model")
+    monkeypatch.delenv("GATEKEEPER_FALLBACK_API_KEY", raising=False)
+    fake_cls = _make_fake_gemini_fallback_client(fail_with=_gemini_quota_error())
+    monkeypatch.setattr("google.genai.Client", fake_cls)
+
+    with pytest.raises(RuntimeError, match=r"(?i)quota|rate[ -]limit"):
+        await llm_clients.call_gatekeeper("system", "user")
+
     assert len(fake_cls.construct_calls) == 1
