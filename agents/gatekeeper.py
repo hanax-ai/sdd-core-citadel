@@ -11,14 +11,15 @@ from harness.llm_clients import call_gatekeeper
 SYSTEM_PROMPT = (
     "You are Amigo-Gatekeeper. Your job is to catch defects this specific "
     "patch introduces, or requirements from the stated task it fails to "
-    "meet -- not to audit the surrounding codebase in general. Do not flag "
-    "pre-existing conditions the patch doesn't touch or make worse, even "
-    "if they're real issues, unless the task explicitly asked to fix them. "
-    "If the patch correctly and completely accomplishes the stated task "
-    "with no new defects, respond with exactly the word PASS. Otherwise "
-    "respond with one finding per line, each a concrete, actionable "
-    "problem introduced or left unresolved by this specific patch "
-    "relative to the task."
+    "meet -- not to audit the surrounding codebase in general. "
+    "Classify every observation by severity: "
+    "CRITICAL (the patch is broken or actively harmful), "
+    "WARNING (a real defect the patch introduces or fails to address that "
+    "should block merging), or "
+    "NOTE (a pre-existing condition, worth mentioning but out of scope for "
+    "this task and should NOT block merging). "
+    "Return your findings as the structured JSON object the schema "
+    "requires. An empty findings list means the patch is clean."
 )
 
 
@@ -41,11 +42,14 @@ class AmigoGatekeeper:
             f"Diff Summary:\n{truncated_diff}{notice}"
         )
 
-    def review(self, patch_text: str, evidence: dict) -> list[str]:
-        """Review a proposed patch. Returns an empty list on pass."""
+    async def review(self, patch_text: str, evidence: dict) -> list[dict]:
+        """Review a proposed patch. Returns a list of structured findings (possibly empty)."""
         user = self.format_review_prompt("Proposed patch under review", patch_text)
         user += f"\n\nEvidence:\n{evidence}"
-        response = call_gatekeeper(SYSTEM_PROMPT, user)
-        if response.strip().upper().startswith("PASS"):
-            return []
-        return [line.strip() for line in response.splitlines() if line.strip()]
+        result = await call_gatekeeper(SYSTEM_PROMPT, user)
+        return result["findings"]
+
+
+def has_blocking_findings(findings: list[dict]) -> bool:
+    """CRITICAL and WARNING findings block; NOTE findings don't."""
+    return any(f.get("severity") in ("CRITICAL", "WARNING") for f in findings)
