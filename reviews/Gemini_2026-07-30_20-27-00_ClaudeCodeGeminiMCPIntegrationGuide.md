@@ -107,6 +107,56 @@ mcp__gemini-collab__ask_gemini prompt: "Analyze the attached database-schema.jpg
 
 *(Note: Ensure terminal directory references match your relative app space so Claude can grab target imagery bytes instantly before hitting the Gemini API endpoint).*
 
+### 📊 Intelligent File Triage Rule Template (`.claudecode.md` / `.claude-rules`)
+
+This rule template forces Claude Code to intelligently triage files by size. It routes massive blocks of code to your Gemini MCP scripts to exploit Gemini's large context window, while keeping small, agile tasks native to Claude's fast execution engine.
+
+#### Step 1: Inject Triage Rules into Your Project
+Create a file named `.claudecode.md` or `.claude-rules` in the root directory of your project repository, and paste the exact instructions below:
+
+```markdown
+# Model Context Protocol Triage Rules (Gemini & Claude)
+
+You are operating alongside a Gemini MCP server (`gemini-collab`). 
+To control token budgets and ensure high-context comprehension, you MUST follow this tool routing policy:
+
+## 1. File Size Evaluation Rule
+Before reading any file content from the local workspace:
+- Check the target file length using your file metrics utilities.
+- If a target file is **300 lines or longer**, do NOT read the file content natively.
+- If multiple context files collectively total **over 10,000 tokens**, halt native execution.
+
+## 2. Gemini MCP Routing Enforcement
+When the criteria in Section 1 are met, immediately offload the context scanning to the Gemini MCP server using the following invocation blueprint:
+
+`mcp__gemini-collab__ask_gemini prompt: "Analyze the attached file at [FILE_PATH] to solve [USER_REQUEST]"`
+
+## 3. Post-Analysis Processing
+- Receive the output payload from the `ask_gemini` script.
+- Use Gemini's high-context structural breakdown to guide your subsequent localized code edits.
+- Never ingest raw source streams for long files if Gemini can act as your context filter.
+```
+
+#### Step 2: Test the Automation Workflow
+To activate the workflow, run your Claude Code terminal inside that workspace directory. Test it with a natural command targeting any large configuration file or component module:
+
+```bash
+# Start your workspace terminal
+claude
+
+# Prompt example that automatically trips the 300+ line constraint rule:
+> Refactor the data pipeline and authentication modules inside ./src/backend/MainEngine.ts
+```
+
+#### Script Execution Flow
+1. **Line Audit:** Claude intercepts your instruction and scans `./src/backend/MainEngine.ts`.
+2. **Triage Trigger:** Claude counts the lines (e.g., 550 lines) and trips the 300+ line triage rule.
+3. **Automated MCP Delegation:** Claude automatically executes the script under the hood:
+   ```bash
+   mcp__gemini-collab__ask_gemini prompt: "Analyze the attached file at ./src/backend/MainEngine.ts to solve Refactor the data pipeline and authentication modules"
+   ```
+4. **Synthesis Return:** Gemini reads the file via its API, generates an architectural refactor map, and routes it back into your Claude interface for localized file editing.
+
 ### 🤖 Automated Dynamic Workflows (Advanced Setup)
 
 When you issue a complex prompt (e.g., *"Rebuild this game engine"*), Claude Code automatically generates an internal script file containing functions for different build and review phases. It then spins up multiple sub-agents in parallel to execute those steps, using the Gemini MCP server to perform deep-context checking while Claude writes final target files.
