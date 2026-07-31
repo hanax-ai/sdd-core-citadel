@@ -118,8 +118,8 @@ export function ConnectionControl({ variant = "panel" }: { variant?: "panel" | "
           <p className="text-[11px] leading-relaxed text-muted-foreground">
             Reachable only from a browser on the same machine as{" "}
             <code className="font-mono">bridge/bridge.py</code>. Requires the bridge's{" "}
-            <code className="font-mono">BRIDGE_API_KEY</code> — stored in this browser only,
-            never sent anywhere except this bridge.
+            <code className="font-mono">BRIDGE_API_KEY</code> — stored in this browser only, never
+            sent anywhere except this bridge.
           </p>
         </div>
       ) : (

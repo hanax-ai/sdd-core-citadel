@@ -51,7 +51,6 @@ export function AppShell({
             </span>
             <span className="micro-label block">Amigo Agents command center</span>
           </span>
-
         </Link>
 
         <nav className="flex flex-1 flex-col gap-0.5 p-3">
@@ -101,7 +100,6 @@ export function AppShell({
             <ConnectionControl variant="compact" />
           </div>
           <div className="ml-auto lg:hidden">
-
             <nav className="flex gap-1 overflow-x-auto">
               {NAV.map(({ to, label }) => (
                 <Link

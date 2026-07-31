@@ -96,9 +96,7 @@ function PatchesPage() {
 
         <div className="min-w-0">
           {transcript.isLoading && <Skeleton className="h-[520px] w-full rounded-lg" />}
-          {transcript.data && (
-            <DiffViewer patch={transcript.data.patch_text} findings={findings} />
-          )}
+          {transcript.data && <DiffViewer patch={transcript.data.patch_text} findings={findings} />}
           {!runId && !logs.isLoading && (
             <div className="glass grid h-64 place-items-center rounded-lg text-sm text-muted-foreground">
               No completed runs yet.

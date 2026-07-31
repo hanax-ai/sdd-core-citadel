@@ -25,10 +25,7 @@ export function ReplaySummaryPanel({ events }: { events: ReplayEvent[] }) {
   const s = useMemo(() => summarizeEvents(events), [events]);
 
   return (
-    <section
-      aria-label="Filtered event summary"
-      className="border-b border-border px-5 py-3"
-    >
+    <section aria-label="Filtered event summary" className="border-b border-border px-5 py-3">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <Label>Filtered run</Label>

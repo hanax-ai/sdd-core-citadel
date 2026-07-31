@@ -3,12 +3,7 @@ import { CheckCircle2, Loader2, PlugZap, AlertTriangle } from "lucide-react";
 import { citadelApi } from "@/lib/citadel/client";
 import { useUIStore } from "@/stores/useUIStore";
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function useBridgeHealth() {
   const mode = useUIStore((s) => s.mode);
@@ -59,38 +54,38 @@ export function BridgeHealthIndicator() {
   return (
     <TooltipProvider delayDuration={100}>
       <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          className={cn(
-            "inline-flex cursor-help items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em]",
-            tone,
-          )}
-          aria-live="polite"
-        >
-          {isFetching && !data ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <Icon className="size-3" />
-          )}
-          {label}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-xs">
-        <p className="font-mono text-[11px] leading-relaxed">
-          {bridgeUrl}
-          /api/system/health
-        </p>
-        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed">
-          {detail.map((d) => (
-            <li key={d}>{d}</li>
-          ))}
-        </ul>
-        {connected && (
-          <p className="mt-1 font-mono text-[10px] opacity-70">
-            uptime {Math.round(data.uptime_s)}s · db {data.database_ok ? "ok" : "unavailable"}
+        <TooltipTrigger asChild>
+          <span
+            className={cn(
+              "inline-flex cursor-help items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.18em]",
+              tone,
+            )}
+            aria-live="polite"
+          >
+            {isFetching && !data ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : (
+              <Icon className="size-3" />
+            )}
+            {label}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p className="font-mono text-[11px] leading-relaxed">
+            {bridgeUrl}
+            /api/system/health
           </p>
-        )}
-      </TooltipContent>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed">
+            {detail.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+          {connected && (
+            <p className="mt-1 font-mono text-[10px] opacity-70">
+              uptime {Math.round(data.uptime_s)}s · db {data.database_ok ? "ok" : "unavailable"}
+            </p>
+          )}
+        </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
