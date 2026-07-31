@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Amigo Agents Harness CLI Runner
-Orchestrates multi-agent builder & gatekeeper review loops.
+Collects git/task evidence for a target directory. Gate validation is
+performed by native SDD-Core tooling, not by this harness.
 """
 
 from __future__ import annotations
