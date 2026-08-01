@@ -5,6 +5,31 @@ reviews:
     enabled: true
     base_branches:
       - main
+    # Loop brake. CodeRabbit re-reviews after every push, so a fix-then-review
+    # cycle can ping-pong; this pauses incremental review after N reviewed
+    # commits. Left at the default rather than raised -- `@coderabbitai resume`
+    # restarts it, and a stuck loop should cost a manual resume, not tokens.
+    auto_pause_after_reviewed_commits: 5
+
+  # Autofix is the chosen fix mechanism, triggered by the 🪄 checkbox or
+  # `@coderabbitai autofix`. It reads CodeRabbit's OWN unresolved threads and the
+  # "Prompt for AI Agents" blocks it already wrote, so the fix is scoped to
+  # findings it authored, and it runs build verification afterwards.
+  #
+  # Deliberately NOT automated further. The alternative -- wiring
+  # anthropics/claude-code-action to fix on every `pull_request` -- was evaluated
+  # and rejected for this repo:
+  #   - GitHub's recursion guard (GITHUB_TOKEN pushes do not trigger workflows)
+  #     does not apply, because that action's documented setup pushes via the
+  #     Claude GitHub App specifically so CI DOES rerun on its commits.
+  #   - Neither vendor documents the cross-tool loop, so it is unsupported ground.
+  #   - This repo is public: pull_request_target runs with base-repo secrets and
+  #     action logs are world-readable.
+  # Tests, typecheck, build, review and merge-blocking are already fully
+  # automatic. The fix step is the one place a human gate is worth keeping.
+  finishing_touches:
+    autofix:
+      enabled: true
 
   path_filters:
     # Working notes, not source. These files embed frozen, point-in-time code
