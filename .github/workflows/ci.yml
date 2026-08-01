@@ -60,8 +60,16 @@ jobs:
       # No API keys are provided, and none are needed: every provider call in the
       # suite is mocked. If a test ever starts requiring a real key, it fails here
       # rather than silently reaching a live endpoint from CI.
+      # `unset` rather than relying on absence: this step is NAMED for the
+      # unset case, so it has to guarantee it. Without this it silently inherits
+      # any runner- or workflow-level value, and the day someone adds a
+      # workflow-level GATEKEEPER_PROVIDER this step keeps its name while
+      # testing something else entirely. Note "" is a different case, covered
+      # separately below.
       - name: pytest (default provider)
-        run: python -m pytest -q --junitxml=pytest-default.xml
+        run: |
+          unset GATEKEEPER_PROVIDER
+          python -m pytest -q --junitxml=pytest-default.xml
 
       # GATEKEEPER_PROVIDER is process-global and read live, so a run's result must
       # not depend on it.
