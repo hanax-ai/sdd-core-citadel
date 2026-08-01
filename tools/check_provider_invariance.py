@@ -33,6 +33,12 @@ def outcomes(report: Path) -> dict[str, str]:
     results: dict[str, str] = {}
     for case in root.iter("testcase"):
         test_id = f"{case.get('classname', '')}::{case.get('name', '')}"
+        if test_id in results:
+            # Silently overwriting would defeat the whole check: a report holding
+            # the same id twice -- skipped then passed -- would collapse to
+            # "passed" and the skip would never be reported. A guard that can be
+            # quietly neutralised is worse than no guard, so fail loudly instead.
+            raise ValueError(f"{report} contains duplicate testcase identifier: {test_id}")
         outcome = next((child.tag for child in case if child.tag in OUTCOME_TAGS), "passed")
         results[test_id] = outcome
     return results
