@@ -25,3 +25,10 @@ logs/
 # CodeGraph local index (machine-specific, rebuildable via `codegraph init`)
 .codegraph/
 
+# Vendored agent skills (machine-local tooling, re-installable). Previously this
+# held an orphaned gitlink: `.agents/skills/blueprint` was committed at mode
+# 160000 while no .gitmodules ever existed, so a clone got an empty directory and
+# `git submodule foreach` failed outright -- which broke CI checkout the moment
+# persist-credentials: false made it run that cleanup. See RAID I20.
+.agents/
+
