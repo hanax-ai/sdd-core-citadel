@@ -36,6 +36,16 @@ jobs:
       # repointed at unreviewed code by a compromised upstream.
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Every later step runs pull-request-controlled code -- the PR's own
+          # tests, its build scripts, its dependency lifecycle hooks. Leaving the
+          # token available to them is an unnecessary exfiltration path. Nothing
+          # here performs git operations after checkout, so dropping it costs
+          # nothing. (Note this is the opposite call from claude.yml, where
+          # claude-code-action fetches branches and genuinely needs the
+          # credential -- same flag, different answer, decided by whether git
+          # operations follow.)
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -51,19 +61,27 @@ jobs:
       # suite is mocked. If a test ever starts requiring a real key, it fails here
       # rather than silently reaching a live endpoint from CI.
       - name: pytest (default provider)
-        run: python -m pytest -q
+        run: python -m pytest -q --junitxml=pytest-default.xml
 
       # GATEKEEPER_PROVIDER is process-global and read live, so a run's result must
-      # not depend on it. All three cases must give identical counts.
+      # not depend on it.
       - name: pytest (GATEKEEPER_PROVIDER=kimi)
         env:
           GATEKEEPER_PROVIDER: kimi
-        run: python -m pytest -q
+        run: python -m pytest -q --junitxml=pytest-kimi.xml
 
       - name: pytest (GATEKEEPER_PROVIDER empty)
         env:
           GATEKEEPER_PROVIDER: ""
-        run: python -m pytest -q
+        run: python -m pytest -q --junitxml=pytest-empty.xml
+
+      # Three green runs prove each configuration passes -- NOT that they ran the
+      # same tests. A provider-dependent skip or a collection difference would
+      # leave all three green while quietly reducing coverage, which is exactly
+      # the class of drift this repo already hit once (ambient GATEKEEPER_PROVIDER
+      # turned 12 tests red). Compare the per-test outcomes, not just exit codes.
+      - name: Verify the provider makes no difference to what ran
+        run: python tools/check_provider_invariance.py pytest-default.xml pytest-kimi.xml pytest-empty.xml
 
   dashboard:
     name: Dashboard typecheck, build, lint
@@ -74,6 +92,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # Every later step runs pull-request-controlled code -- the PR's own
+          # tests, its build scripts, its dependency lifecycle hooks. Leaving the
+          # token available to them is an unnecessary exfiltration path. Nothing
+          # here performs git operations after checkout, so dropping it costs
+          # nothing. (Note this is the opposite call from claude.yml, where
+          # claude-code-action fetches branches and genuinely needs the
+          # credential -- same flag, different answer, decided by whether git
+          # operations follow.)
+          persist-credentials: false
 
       # Bun, not npm: dashboard/bun.lock is the tracked lockfile. Installing with
       # npm ignores it entirely and resolves fresh versions, so CI would test a

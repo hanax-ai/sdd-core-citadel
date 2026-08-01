@@ -31,11 +31,19 @@ def test_blank_amigo_target_dir_counts_as_unset(monkeypatch):
     assert resolve_default_target_dir() == AMIGO_ROOT
 
 
-def test_default_target_dir_is_absolute(monkeypatch, tmp_path):
+def test_relative_amigo_target_dir_resolves_to_an_absolute_path(monkeypatch, tmp_path):
     # bridge.py uses this as the allowlist root for _is_within(); a relative path
     # there would make the traversal guard compare against the process cwd.
-    monkeypatch.setenv("AMIGO_TARGET_DIR", str(tmp_path))
-    assert resolve_default_target_dir().is_absolute()
+    # Setting tmp_path here would prove nothing -- it is already absolute -- so
+    # the value under test has to be genuinely relative.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AMIGO_TARGET_DIR", "relative-target")
+    resolved = resolve_default_target_dir()
+    assert resolved.is_absolute()
+    assert resolved == (tmp_path / "relative-target").resolve()
+
+
+def test_default_target_dir_is_absolute_when_unset(monkeypatch):
     monkeypatch.delenv("AMIGO_TARGET_DIR", raising=False)
     assert resolve_default_target_dir().is_absolute()
 
