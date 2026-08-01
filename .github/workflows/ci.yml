@@ -1,0 +1,99 @@
+name: CI
+
+# The repo had no automated gating at all before this: claude.yml only fires on
+# "@claude" mentions in comments, so nothing ran the test suite on a push or a
+# pull request. A commit that broke every test could reach main unchallenged.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+# Read-only. This workflow only needs the source; it never comments, labels or
+# pushes. CodeRabbit's GitHub App handles review and carries its own permissions.
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every failing version, not just the first -- a 3.12-only break is
+      # worth seeing even when 3.11 is already red.
+      fail-fast: false
+      matrix:
+        # 3.11 is what the suite is developed against; 3.12 is what the plan's
+        # prerequisites claim. Running both keeps that claim honest.
+        python-version: ["3.11", "3.12"]
+    steps:
+      # Actions are pinned to commit SHAs, not tags. A mutable tag could be
+      # repointed at unreviewed code by a compromised upstream.
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # No API keys are provided, and none are needed: every provider call in the
+      # suite is mocked. If a test ever starts requiring a real key, it fails here
+      # rather than silently reaching a live endpoint from CI.
+      - name: pytest (default provider)
+        run: python -m pytest -q
+
+      # GATEKEEPER_PROVIDER is process-global and read live, so a run's result must
+      # not depend on it. All three cases must give identical counts.
+      - name: pytest (GATEKEEPER_PROVIDER=kimi)
+        env:
+          GATEKEEPER_PROVIDER: kimi
+        run: python -m pytest -q
+
+      - name: pytest (GATEKEEPER_PROVIDER empty)
+        env:
+          GATEKEEPER_PROVIDER: ""
+        run: python -m pytest -q
+
+  dashboard:
+    name: Dashboard typecheck, build, lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # Bun, not npm: dashboard/bun.lock is the tracked lockfile. Installing with
+      # npm ignores it entirely and resolves fresh versions, so CI would test a
+      # different dependency tree than the one committed.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # vite build does NOT typecheck -- esbuild strips types without checking
+      # them -- so tsc has to run as its own step or type errors ship silently.
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      # The dashboard was taken to 0 eslint errors; this keeps it there. eslint
+      # exits non-zero only on errors, so the 9 advisory react-refresh warnings
+      # do not fail the build.
+      - name: Lint
+        run: bun run lint
