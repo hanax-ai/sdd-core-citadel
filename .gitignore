@@ -13,9 +13,14 @@ env/
 .env.local
 .env.*.local
 
-# Docs and reviews (not version-controlled going forward)
+# Docs, reviews, and research (not version-controlled going forward)
 docs/
 reviews/
+research/
+
+# Local runtime data (agent run transcripts, bridge SQLite database)
+logs/
+*.sqlite3
 
 # CodeGraph local index (machine-specific, rebuildable via `codegraph init`)
 .codegraph/
