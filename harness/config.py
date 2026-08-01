@@ -21,8 +21,23 @@ def load_env_file():
 
 load_env_file()
 
-# Default target directory to audit / build against
-DEFAULT_TARGET_DIR = Path(r"C:\Users\JarvisRichardson\Desktop\WiP\SDD-Core-Framework-Analysis")
+def resolve_default_target_dir() -> Path:
+    """Directory the harness audits / builds against by default.
+
+    Honours AMIGO_TARGET_DIR, which harness/bridge.py already reads -- this just
+    applies it at the source rather than only at the bridge. Empty or
+    whitespace-only counts as unset, matching resolve_gatekeeper_provider.
+
+    Falls back to the repo itself. This used to be a hardcoded absolute path to
+    one developer's machine, which meant tests asserting the directory exists
+    failed on every other machine and made CI impossible to run at all. The repo
+    root always exists in any clone, so the default is portable.
+    """
+    configured = os.environ.get("AMIGO_TARGET_DIR", "").strip()
+    return Path(configured).resolve() if configured else AMIGO_ROOT
+
+
+DEFAULT_TARGET_DIR = resolve_default_target_dir()
 
 # Sub-directories
 HARNESS_DIR = AMIGO_ROOT / "harness"
