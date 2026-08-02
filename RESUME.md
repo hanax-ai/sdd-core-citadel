@@ -93,8 +93,9 @@ python -m pytest -q                        # expect: 162 passed
 # Piping a remote script to a shell: download and read it first. That is how the
 # CodeRabbit installer was vetted in this repo, and it is the control that the
 # LiteLLM supply-chain compromise defeated for everyone who skipped it.
-curl -fsSL https://bun.sh/install -o /tmp/bun-install.sh && less /tmp/bun-install.sh
-sh /tmp/bun-install.sh
+curl -fsSL https://bun.sh/install -o /tmp/bun-install.sh
+sed -n '1,200p' /tmp/bun-install.sh          # read it; `less` is not guaranteed installed
+sh /tmp/bun-install.sh && rm -f /tmp/bun-install.sh
 cd dashboard && bun install --frozen-lockfile
 bun run typecheck && bun run build && bun run lint
 ```
@@ -103,8 +104,17 @@ bun run typecheck && bun run build && bun run lint
 
 - **CodeRabbit CLI runs natively.** No WSL shim needed. The four shims in
   `~/.local/bin` on Windows (`coderabbit`, `cr`, `.cmd` twins) exist only because there is no
-  Windows binary. On Linux: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh`, then
-  `coderabbit auth login --api-key "$KEY"`. Requires `unzip` and `git`.
+  Windows binary. On Linux, same download-then-read pattern as Bun above:
+
+  ```bash
+  curl -fsSL https://cli.coderabbit.ai/install.sh -o /tmp/cr-install.sh
+  sed -n '1,200p' /tmp/cr-install.sh
+  CI=1 sh /tmp/cr-install.sh && rm -f /tmp/cr-install.sh   # CI=1 skips the interactive login
+  coderabbit auth login --api-key "$CODERABBIT_KEY"
+  ```
+
+  Requires `unzip` and `git`, both in the bootstrap above. Note the CLI does **not** read
+  `CODERABBIT_API_KEY` as an environment variable — it must be passed to `--api-key`.
 - **No CRLF problem.** `.gitattributes` is `* text=auto eol=lf`. On Windows, agents rewriting
   Python files kept reintroducing CRLF and `core.safecrlf` blocked commits with
   `fatal: CRLF would be replaced by LF`. That failure mode disappears.
