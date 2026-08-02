@@ -112,7 +112,12 @@ bun run typecheck && bun run build && bun run lint
   sed -n '1,200p' /tmp/cr-install.sh
   CI=1 sh /tmp/cr-install.sh && rm -f /tmp/cr-install.sh   # CI=1 skips the interactive login
   export PATH="$HOME/.local/bin:$PATH"                    # installs here; not on PATH until exported
-  coderabbit auth login --api-key "<agentic-key-from-app.coderabbit.ai/settings/api-keys>"
+
+  # Prompt for the key rather than typing it inline -- an inline --api-key value
+  # lands in ~/.bash_history. Get an *Agentic* key (user API keys are rejected)
+  # from https://app.coderabbit.ai/settings/api-keys
+  read -rs -p 'CodeRabbit Agentic API key: ' CR_KEY && echo
+  coderabbit auth login --api-key "$CR_KEY"; unset CR_KEY
   ```
 
   Requires `unzip` and `git`, both in the bootstrap above. Note the CLI does **not** read
