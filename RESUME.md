@@ -11,7 +11,7 @@ Read this first. It is written for the machine you are moving *to*, not the one 
 
 `main` is green, protected, and pushed. Nothing is half-finished.
 
-```
+```text
 main            1de4d49   == origin/main, tree clean
 tests           162 passed  (Python 3.11 and 3.12)
 dashboard       tsc --noEmit exit 0 · vite build ok · eslint 0 errors, 9 advisory warnings
@@ -45,11 +45,21 @@ branch ruleset  20167729 "main protection" — ACTIVE
 ### The one thing that will stop you dead
 
 **`.env` is gitignored and will not be on the server.** Neither will `docs/KEYS.MD`. Both live only
-on the Windows machine. Copy them across by hand, out of band — do not commit them.
+on the previous workstation and must be transferred out of band — never committed, never pasted
+into a chat, an issue, or a CI variable that echoes.
+
+Transfer over an encrypted channel (`scp` over SSH, or a password manager), then immediately
+restrict them:
+
+```bash
+chmod 600 .env docs/KEYS.MD
+```
+
+Do not `cat`, `echo` or otherwise print either file. Rotate anything that reaches a log.
 
 `.env` needs, at minimum:
 
-```
+```dotenv
 ANTHROPIC_API_KEY=…
 OPENAI_API_KEY=…
 GEMINI_API_KEY=…
@@ -63,12 +73,16 @@ variables win over the file.
 ### Setup
 
 ```bash
+# Bootstrap first. On a minimal 24.04 image none of these are guaranteed present,
+# and every step below needs one of them.
+sudo apt update
+sudo apt install -y git curl unzip python3-venv
+
 git clone https://github.com/hanax-ai/sdd-core-citadel.git
 cd sdd-core-citadel
 
 # Python — Ubuntu 24.04 enforces PEP 668, so a venv is mandatory, not optional.
 # `pip install` outside one fails with externally-managed-environment.
-sudo apt install -y python3-venv          # not installed by default on 24.04
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m pytest -q                        # expect: 162 passed
@@ -76,7 +90,11 @@ python -m pytest -q                        # expect: 162 passed
 # Dashboard — use Bun, NOT npm.
 # dashboard/bun.lock is the tracked lockfile; npm ignores it and resolves fresh
 # versions, so npm gives you a different dependency tree than CI tests.
-curl -fsSL https://bun.sh/install | bash
+# Piping a remote script to a shell: download and read it first. That is how the
+# CodeRabbit installer was vetted in this repo, and it is the control that the
+# LiteLLM supply-chain compromise defeated for everyone who skipped it.
+curl -fsSL https://bun.sh/install -o /tmp/bun-install.sh && less /tmp/bun-install.sh
+sh /tmp/bun-install.sh
 cd dashboard && bun install --frozen-lockfile
 bun run typecheck && bun run build && bun run lint
 ```
@@ -102,8 +120,8 @@ bun run typecheck && bun run build && bun run lint
 
 ### Left behind on Windows — decide before wiping that machine
 
-**`C:\Users\JarvisRichardson\Desktop\SDD\citadel-backup.git`** is the **only surviving copy of
-pre-rewrite history** (115 commits, tip `ea6f6e7`, all 254 purged objects). It already recovered 9
+**`<workstation>/SDD/citadel-backup.git`** — exact path kept in local notes, deliberately not
+written into this tracked file — is the **only surviving copy of pre-rewrite history** (115 commits, tip `ea6f6e7`, all 254 purged objects). It already recovered 9
 files once. Nothing on GitHub has it. If that machine is wiped, it is gone permanently.
 
 ---
@@ -117,7 +135,7 @@ report success while doing nothing — the same failure shape, three times.
 
 **A1 — `max_rounds` is discarded.** Validated 1–6 at two layers, then never passed to the loop.
 
-```
+```text
 dashboard/src/lib/citadel/contract.ts:190   max_rounds: z.number().int().min(1).max(6)
 harness/bridge.py:319                       RunTaskRequest.max_rounds (default 3, ge=1, le=6)
 harness/bridge.py:468-473                   run_collaboration_cycle(target_dir, task_description,
@@ -152,8 +170,8 @@ reports success while doing nothing is worse than no control.
 **A3 — `amigo/TaskDispatcher` discards every input.**
 `dashboard/src/components/amigo/TaskDispatcher.tsx:58` calls `run.start()` with **no arguments**,
 then toasts the `rounds` value it just discarded. There are two `TaskDispatcher` components
-(`citadel/` and `amigo/`), both hardcoding the same absolute Windows `WiP` path as a default —
-which will look especially wrong on Ubuntu. Establish which is live, delete the other.
+(`citadel/` and `amigo/`), both hardcoding the same absolute Windows path as a default, which will not
+resolve on Ubuntu at all. Establish which is live, delete the other.
 
 Given all three are the same failure shape, consider one integration test over the dispatch surface
 rather than three isolated fixes.
@@ -194,8 +212,8 @@ Eight orphaned SHAs returned `200` when the ticket was filed despite being unrea
 ref. **Success means they stop resolving.** Full list and the ticket text are in
 `docs/github-support-request-I17.md` (gitignored — copy it across).
 
-**Not removed, by explicit decision:** the Windows username and the path
-`…\WiP\SDD-Core-Framework-Analysis` remain in six tracked source files (`AGENTS.md`, `README.md`,
+**Not removed, by explicit decision:** the previous workstation's username, and an absolute path to
+an unrelated local project, remain in six tracked source files (`AGENTS.md`, `README.md`,
 both `TaskDispatcher.tsx`, `fixtures.ts`, `routes/index.tsx`) since the initial commit. Removing
 them needs a source change *plus* a second force-push. Recorded in RAID `I17`.
 
