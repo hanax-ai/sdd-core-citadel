@@ -8,9 +8,9 @@ venv/
 .venv/
 env/
 
-# Environment secrets. `.env.*` with an explicit allow for the template is
-# deliberately broader than listing variants: `.env.local` / `.env.*.local` left
-# `.env.production` and `.env.dev` committable.
+# Environment secrets. `.env.*` plus an explicit allow for the template covers
+# every variant, including `.env.production` and `.env.dev`. It replaced
+# `.env.local` / `.env.*.local`, which matched neither of those two.
 .env
 .env.*
 !.env.example
