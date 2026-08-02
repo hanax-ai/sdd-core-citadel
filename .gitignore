@@ -8,10 +8,21 @@ venv/
 .venv/
 env/
 
-# Environment secrets
+# Environment secrets. `.env.*` with an explicit allow for the template is
+# deliberately broader than listing variants: `.env.local` / `.env.*.local` left
+# `.env.production` and `.env.dev` committable.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Plaintext key scratch files. `docs/` below already covers docs/KEYS.MD, but
+# only incidentally -- the same file one directory up was committable. Nothing
+# in the harness reads these; keys reach the code through .env only.
+KEYS.md
+KEYS.MD
+keys.md
+SECRETS.md
+secrets.md
 
 # Docs, reviews, and research (not version-controlled going forward)
 docs/

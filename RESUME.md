@@ -48,24 +48,43 @@ branch ruleset  20167729 "main protection" — ACTIVE
 on the previous workstation and must be transferred out of band — never committed, never pasted
 into a chat, an issue, or a CI variable that echoes.
 
-Transfer over an encrypted channel (`scp` over SSH, or a password manager), then immediately
-restrict them:
+Only `.env` is actually required: nothing in the harness reads `KEYS.MD`, which is a scratch file.
+Copying it to the server adds a second plaintext copy of the same secrets with no consumer — prefer
+leaving it behind.
+
+Transfer over an encrypted channel — `scp` over SSH, a password manager, or editing the file
+directly on the server through VS Code Remote-SSH (which keeps the values out of shell history on
+both machines). Then restrict it:
 
 ```bash
-chmod 600 .env docs/KEYS.MD
+chmod 600 .env
 ```
+
+VS Code writes new files at the default umask (`644` — world-readable), so run the `chmod` after
+saving, not before.
 
 Do not `cat`, `echo` or otherwise print either file. Rotate anything that reaches a log.
 
 `.env` needs, at minimum:
 
 ```dotenv
+BRIDGE_API_KEY=…              # NOT a vendor key -- generate your own, see below
 ANTHROPIC_API_KEY=…
 OPENAI_API_KEY=…
 GEMINI_API_KEY=…
 MOONSHOT_API_KEY=…
 GATEKEEPER_PROVIDER=kimi      # current setting; unset or "gemini" for the default
 ```
+
+`BRIDGE_API_KEY` is the one that is easy to miss: it is the bridge's own shared secret, not
+something a vendor issues, so there is nothing to transfer — generate a fresh one on the server:
+
+```bash
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+`harness/bridge.py` raises at startup without it and every route 401s until it matches, so the
+bridge will not come up on a freshly-populated `.env` that omits it.
 
 `harness/config.py` reads `.env` at import with `os.environ.setdefault`, so real environment
 variables win over the file.
