@@ -44,26 +44,26 @@ branch ruleset  20167729 "main protection" — ACTIVE
 
 ### The one thing that will stop you dead
 
-**`.env` is gitignored and will not be on the server.** Neither will `docs/KEYS.MD`. Both live only
-on the previous workstation and must be transferred out of band — never committed, never pasted
-into a chat, an issue, or a CI variable that echoes.
+**`.env` is gitignored and will not be on the server.** It lives only on the previous workstation
+and is the one file that must be reproduced out of band — never committed, never pasted into a
+chat, an issue, or a CI variable that echoes.
 
-Only `.env` is actually required: nothing in the harness reads `KEYS.MD`, which is a scratch file.
-Copying it to the server adds a second plaintext copy of the same secrets with no consumer — prefer
-leaving it behind.
+`docs/KEYS.MD` is gitignored too, but leave it behind: nothing in the harness reads it. It is a
+scratch file, and copying it forward would put a second plaintext copy of the same secrets on a
+new host for no gain.
 
-Transfer over an encrypted channel — `scp` over SSH, a password manager, or editing the file
-directly on the server through VS Code Remote-SSH (which keeps the values out of shell history on
-both machines). Then restrict it:
+Reproduce `.env` over an encrypted channel — `scp` over SSH, a password manager, or editing the
+file directly on the server through VS Code Remote-SSH (which keeps the values out of shell
+history on both machines). Then restrict it:
 
 ```bash
 chmod 600 .env
 ```
 
-VS Code writes new files at the default umask (`644` — world-readable), so run the `chmod` after
-saving, not before.
+Run that after saving, not before: with a typical `022` umask VS Code creates the file at mode
+`0644`, readable by every account on the box.
 
-Do not `cat`, `echo` or otherwise print either file. Rotate anything that reaches a log.
+Do not `cat`, `echo` or otherwise print it. Rotate anything that reaches a log.
 
 `.env` needs, at minimum:
 
