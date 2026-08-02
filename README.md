@@ -7,7 +7,7 @@
 
 ## 🏛️ System Architecture & LLM Provider Roster
 
-**SDD-Core CITADEL** (`hanax-ai/sdd-core-citadel`) is an enterprise-grade multi-agent software engineering framework and real-time operational dashboard. It coordinates a team of specialized AI agents across a **4-stage software development lifecycle** (`Discover` $\rightarrow$ `Plan` $\rightarrow$ `Execute` $\rightarrow$ `Validate & Remediate`).
+**SDD-Core CITADEL** (`hanax-ai/sdd-core-citadel`) is an enterprise-grade multi-agent software engineering framework and real-time operational dashboard. It coordinates a team of specialized AI agents across a **4-stage software development lifecycle** (`Discover` → `Plan` → `Execute` → `Validate & Remediate`).
 
 ```mermaid
 flowchart TD
